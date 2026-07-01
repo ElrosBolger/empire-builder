@@ -151,3 +151,28 @@ export function calculateTotalSlots(prestige: number, boughtSlots: number): numb
 export function calculateSlotCost(boughtSlots: number): number {
   return Math.floor(50000 * Math.pow(2.5, boughtSlots))
 }
+
+// Costo cumulativo per potenziare un edificio da fromLevel di `count` livelli.
+// Ritorna quanti livelli sono effettivamente acquistabili con il denaro disponibile
+// e il costo totale. Se money è undefined, calcola il costo pieno di `count` livelli.
+export function calculateUpgradeBatch(
+  type: string,
+  fromLevel: number,
+  count: number,
+  money?: number
+): { levels: number; totalCost: number } {
+  let totalCost = 0
+  let levels = 0
+  for (let i = 1; i <= count; i++) {
+    const stepCost = calculateBuildingCost(type, fromLevel + i)
+    if (money !== undefined && totalCost + stepCost > money) break
+    totalCost += stepCost
+    levels++
+  }
+  return { levels, totalCost }
+}
+
+// Costo cumulativo per costruire `count` edifici dello stesso tipo (tutti a livello 1)
+export function calculateBuildBatchCost(type: string, count: number): number {
+  return calculateBuildingCost(type, 1) * count
+}
