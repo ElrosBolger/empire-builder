@@ -295,6 +295,27 @@ body {
   background: rgba(220, 38, 38, 0.3);
 }
 
+.upgrade-button {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.upgrade-button:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.3);
+}
+
+.upgrade-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .empty {
   text-align: center;
   color: #94a3b8;
