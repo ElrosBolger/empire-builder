@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react'
 import type { GameState, Building } from './types'
 import { supabase, verifyBuildingAction, calculatePlayerIncomeServer, signOut } from './supabaseClient'
-import { calculateLevel, calculateBuildingCost, calculateBuildingIncome, calculatePrestigeGain, calculatePrestigeBonus, getAvailableBuildingsAtLevel } from './buildings'
+import { calculateLevel, calculateBuildingCost, calculateBuildingIncome, calculatePrestigeGain, calculatePrestigeBonus, getAvailableBuildingsAtLevel, calculateTotalSlots, calculateSlotCost } from './buildings'
 import { formatMoney, formatIncome, formatTime } from './formatting'
 import './App.css'
 
@@ -68,6 +68,7 @@ export default function App() {
           level: created.level,
           prestige: created.prestige,
           slots: created.slots,
+          bought_slots: created.bought_slots || 0,
           play_time_seconds: created.play_time_seconds,
           total_money_earned: created.total_money_earned,
           buildings: [],
@@ -86,6 +87,7 @@ export default function App() {
           level: gameData.level,
           prestige: gameData.prestige,
           slots: gameData.slots,
+          bought_slots: gameData.bought_slots || 0,
           play_time_seconds: gameData.play_time_seconds,
           total_money_earned: gameData.total_money_earned,
           buildings: buildings || [],
@@ -159,6 +161,12 @@ export default function App() {
   // Build building (con anti-cheat server)
   async function buildBuilding(buildingType: string) {
     if (!gameState) return
+
+    // Blocco al cap: non si può costruire se gli slot sono pieni
+    if (gameState.buildings.length >= gameState.slots) {
+      alert('Slot pieni! Vendi una proprietà o compra uno slot per costruire ancora.')
+      return
+    }
 
     try {
       const timestamp = Date.now()
@@ -361,6 +369,55 @@ export default function App() {
     }
   }
 
+  // Compra uno slot extra con denaro (costo esponenziale)
+  async function buySlot() {
+    if (!gameState) return
+
+    try {
+      const bought = gameState.bought_slots || 0
+      const cost = calculateSlotCost(bought)
+
+      if (gameState.money < cost) {
+        alert('Fondi insufficienti per comprare uno slot')
+        return
+      }
+
+      const newMoney = gameState.money - cost
+      const newBought = bought + 1
+      const newSlots = calculateTotalSlots(gameState.prestige, newBought)
+
+      // Salva nel DB
+      await supabase
+        .from('game_state')
+        .update({ money: newMoney, bought_slots: newBought, slots: newSlots })
+        .eq('user_id', gameState.user_id)
+
+      // Log transazione
+      await supabase.from('transactions').insert({
+        user_id: gameState.user_id,
+        action: 'buy_slot',
+        cost_paid: cost,
+        money_before: gameState.money,
+        money_after: newMoney,
+        level_before: gameState.level,
+        level_after: gameState.level,
+        timestamp: new Date(),
+        client_timestamp: new Date()
+      })
+
+      // Aggiorna UI
+      setGameState({
+        ...gameState,
+        money: newMoney,
+        bought_slots: newBought,
+        slots: newSlots
+      })
+    } catch (err) {
+      console.error('Buy slot error:', err)
+      alert('Acquisto slot fallito: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    }
+  }
+
   // Prestige choice
   async function handlePrestigeChoice(choice: 'continue' | 'reset') {
     if (!gameState) return
@@ -391,8 +448,7 @@ export default function App() {
         })
       } else {
         // OPZIONE B: Resetta
-        const bonus = calculatePrestigeBonus(newPrestige)
-        const newSlots = 12 + bonus.slotBonus
+        const newSlots = calculateTotalSlots(newPrestige, gameState.bought_slots || 0)
 
         // Cancella edifici
         await supabase
@@ -478,10 +534,13 @@ export default function App() {
                 <p>Income: {formatIncome(calculateBuildingIncome(buildingType, 1))}</p>
                 <button
                   onClick={() => buildBuilding(buildingType)}
-                  disabled={gameState.money < calculateBuildingCost(buildingType, 1)}
+                  disabled={
+                    gameState.money < calculateBuildingCost(buildingType, 1) ||
+                    gameState.buildings.length >= gameState.slots
+                  }
                   className="btn-build"
                 >
-                  Costruisci
+                  {gameState.buildings.length >= gameState.slots ? 'Slot pieni' : 'Costruisci'}
                 </button>
               </div>
             ))}
@@ -490,7 +549,16 @@ export default function App() {
 
         {/* Properties List */}
         <div className="properties-section">
-          <h2>🏘️ Proprietà ({gameState.buildings.length}/{gameState.slots})</h2>
+          <div className="properties-header">
+            <h2>🏘️ Proprietà ({gameState.buildings.length}/{gameState.slots})</h2>
+            <button
+              className="buy-slot-button"
+              onClick={buySlot}
+              disabled={gameState.money < calculateSlotCost(gameState.bought_slots || 0)}
+            >
+              ➕ Slot ({formatMoney(calculateSlotCost(gameState.bought_slots || 0))})
+            </button>
+          </div>
           <div className="properties-list">
             {gameState.buildings.length === 0 ? (
               <p className="empty">Nessuna proprietà ancora</p>
