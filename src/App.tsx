@@ -342,6 +342,16 @@ export default function App() {
         return
       }
 
+      // Conferma esplicita dell'acquisto
+      const incomeNow = calculateBuildingIncome(building.type, building.level)
+      const incomeNext = calculateBuildingIncome(building.type, nextLevel)
+      const conferma = window.confirm(
+        `Potenziare ${building.type} al livello ${nextLevel}?\n\n` +
+        `Costo: ${formatMoney(cost)}\n` +
+        `Reddito: ${formatIncome(incomeNow)} → ${formatIncome(incomeNext)}`
+      )
+      if (!conferma) return
+
       // Sincronizza il denaro reale col server PRIMA della verifica anti-cheat
       await syncMoneyToServer()
 
@@ -501,7 +511,8 @@ export default function App() {
             level: 1,
             prestige: newPrestige,
             slots: newSlots,
-            play_time_seconds: 0
+            play_time_seconds: 0,
+            total_money_earned: 0
           })
           .eq('user_id', gameState.user_id)
 
@@ -511,8 +522,9 @@ export default function App() {
           level: 1,
           prestige: newPrestige,
           slots: newSlots,
+          bought_slots: gameState.bought_slots || 0,
           play_time_seconds: 0,
-          total_money_earned: gameState.total_money_earned,
+          total_money_earned: 0,
           buildings: [],
           last_sync: new Date()
         })
@@ -522,6 +534,74 @@ export default function App() {
     } catch (err) {
       console.error('Prestige error:', err)
       alert('Error: ' + (err instanceof Error ? err.message : 'Unknown'))
+    }
+  }
+
+  // Reset manuale volontario (disponibile da Lv10, con conferma)
+  async function handleManualReset() {
+    if (!gameState) return
+
+    // Reset serio: solo da Lv10 in su
+    if (gameState.level < 10) {
+      alert('Il reset è disponibile dal Livello 10. Continua a crescere!')
+      return
+    }
+
+    const prestigeGain = calculatePrestigeGain(gameState.level)
+    const newPrestige = gameState.prestige + prestigeGain
+
+    // Conferma esplicita: azione irreversibile
+    const conferma = window.confirm(
+      `Vuoi davvero ricominciare?\n\n` +
+      `Guadagni: +${prestigeGain} Prestige (totale ${newPrestige})\n` +
+      `Perdi: tutti gli edifici e i soldi attuali\n\n` +
+      `I bonus prestige rendono la prossima partita più veloce. Procedere?`
+    )
+    if (!conferma) return
+
+    try {
+      // Log audit
+      await supabase.from('prestige_log').insert({
+        user_id: gameState.user_id,
+        milestone_level: gameState.level,
+        prestige_gained: prestigeGain,
+        prestige_total: newPrestige,
+        verified: true
+      })
+
+      const newSlots = calculateTotalSlots(newPrestige, gameState.bought_slots || 0)
+
+      // Cancella edifici
+      await supabase.from('buildings').delete().eq('user_id', gameState.user_id)
+
+      // Reset dello stato (total_money_earned azzerato: riparti davvero da Lv1)
+      await supabase
+        .from('game_state')
+        .update({
+          money: 100000,
+          level: 1,
+          prestige: newPrestige,
+          slots: newSlots,
+          play_time_seconds: 0,
+          total_money_earned: 0
+        })
+        .eq('user_id', gameState.user_id)
+
+      setGameState({
+        user_id: gameState.user_id,
+        money: 100000,
+        level: 1,
+        prestige: newPrestige,
+        slots: newSlots,
+        bought_slots: gameState.bought_slots || 0,
+        play_time_seconds: 0,
+        total_money_earned: 0,
+        buildings: [],
+        last_sync: new Date()
+      })
+    } catch (err) {
+      console.error('Reset error:', err)
+      alert('Reset fallito: ' + (err instanceof Error ? err.message : 'Unknown'))
     }
   }
 
@@ -540,6 +620,7 @@ export default function App() {
     sum + calculateBuildingIncome(b.type, b.level), 0
   )
   const availableBuildings = getAvailableBuildingsAtLevel(gameState.level)
+  const prestigeGain = calculatePrestigeGain(gameState.level)
 
   return (
     <div className="game-container">
@@ -554,6 +635,14 @@ export default function App() {
           </div>
         </div>
         <div className="header-right">
+          <button
+            onClick={handleManualReset}
+            className="btn-reset"
+            disabled={gameState.level < 10}
+            title={gameState.level < 10 ? 'Disponibile dal Livello 10' : 'Ricomincia e guadagna Prestige'}
+          >
+            {gameState.level < 10 ? `🔄 Reset (Lv10)` : `🔄 Reset (+${prestigeGain} ⭐)`}
+          </button>
           <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </header>
