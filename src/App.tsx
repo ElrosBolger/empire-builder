@@ -286,6 +286,81 @@ export default function App() {
     }
   }
 
+  // Potenzia un edificio: +1 livello, aumenta il reddito. Costo esponenziale (anti-exploit)
+  async function upgradeBuilding(building: Building) {
+    if (!gameState) return
+
+    try {
+      const nextLevel = building.level + 1
+      const cost = calculateBuildingCost(building.type, nextLevel)
+
+      // Controllo fondi (verrà validato anche lato server)
+      if (gameState.money < cost) {
+        alert('Fondi insufficienti per il potenziamento')
+        return
+      }
+
+      // Anti-cheat: verifica lato server
+      const { data: verification, error: verifyError } = await verifyBuildingAction(
+        gameState.user_id,
+        'upgrade',
+        building.type,
+        cost,
+        new Date()
+      )
+
+      if (verifyError || !verification?.allowed) {
+        alert(`Upgrade negato: ${verification?.error_message || verifyError?.message}`)
+        return
+      }
+
+      const newMoney = gameState.money - cost
+
+      // 1. Aggiorna il livello dell'edificio nel DB
+      const { error: updError } = await supabase
+        .from('buildings')
+        .update({ level: nextLevel })
+        .eq('id', building.id)
+
+      if (updError) {
+        alert('Upgrade fallito: ' + updError.message)
+        return
+      }
+
+      // 2. Scala il denaro (total_money_earned NON cambia: è una spesa)
+      await supabase
+        .from('game_state')
+        .update({ money: newMoney })
+        .eq('user_id', gameState.user_id)
+
+      // 3. Log transazione
+      await supabase.from('transactions').insert({
+        user_id: gameState.user_id,
+        action: 'upgrade',
+        building_type: building.type,
+        cost_paid: cost,
+        money_before: gameState.money,
+        money_after: newMoney,
+        level_before: gameState.level,
+        level_after: gameState.level,
+        timestamp: new Date(),
+        client_timestamp: new Date()
+      })
+
+      // 4. Aggiorna UI
+      setGameState({
+        ...gameState,
+        money: newMoney,
+        buildings: gameState.buildings.map(b =>
+          b.id === building.id ? { ...b, level: nextLevel } : b
+        )
+      })
+    } catch (err) {
+      console.error('Upgrade error:', err)
+      alert('Upgrade fallito: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    }
+  }
+
   // Prestige choice
   async function handlePrestigeChoice(choice: 'continue' | 'reset') {
     if (!gameState) return
@@ -424,6 +499,13 @@ export default function App() {
                 <div key={building.id} className="property-item">
                   <span>{building.type} Lv{building.level}</span>
                   <span>{formatIncome(calculateBuildingIncome(building.type, building.level))}</span>
+                  <button
+                    className="upgrade-button"
+                    onClick={() => upgradeBuilding(building)}
+                    disabled={gameState.money < calculateBuildingCost(building.type, building.level + 1)}
+                  >
+                    ⬆ Upgrade ({formatMoney(calculateBuildingCost(building.type, building.level + 1))})
+                  </button>
                   <button
                     className="sell-button"
                     onClick={() => sellBuilding(building)}
