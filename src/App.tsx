@@ -235,6 +235,57 @@ export default function App() {
     }
   }
 
+  // Vendi un edificio (rimborso 50% del costo, mai un guadagno)
+  async function sellBuilding(building: Building) {
+    if (!gameState) return
+
+    try {
+      const refund = Math.floor(calculateBuildingCost(building.type, building.level) * 0.5)
+      const newMoney = gameState.money + refund
+
+      // 1. Rimuovi l'edificio dal DB
+      const { error: delError } = await supabase
+        .from('buildings')
+        .delete()
+        .eq('id', building.id)
+
+      if (delError) {
+        alert('Vendita fallita: ' + delError.message)
+        return
+      }
+
+      // 2. Aggiorna il denaro (total_money_earned NON cambia: non è un vero guadagno)
+      await supabase
+        .from('game_state')
+        .update({ money: newMoney })
+        .eq('user_id', gameState.user_id)
+
+      // 3. Log transazione (audit trail)
+      await supabase.from('transactions').insert({
+        user_id: gameState.user_id,
+        action: 'sell',
+        building_type: building.type,
+        cost_paid: -refund,
+        money_before: gameState.money,
+        money_after: newMoney,
+        level_before: gameState.level,
+        level_after: gameState.level,
+        timestamp: new Date(),
+        client_timestamp: new Date()
+      })
+
+      // 4. Aggiorna UI
+      setGameState({
+        ...gameState,
+        money: newMoney,
+        buildings: gameState.buildings.filter(b => b.id !== building.id)
+      })
+    } catch (err) {
+      console.error('Sell error:', err)
+      alert('Vendita fallita: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    }
+  }
+
   // Prestige choice
   async function handlePrestigeChoice(choice: 'continue' | 'reset') {
     if (!gameState) return
@@ -373,6 +424,12 @@ export default function App() {
                 <div key={building.id} className="property-item">
                   <span>{building.type} Lv{building.level}</span>
                   <span>{formatIncome(calculateBuildingIncome(building.type, building.level))}</span>
+                  <button
+                    className="sell-button"
+                    onClick={() => sellBuilding(building)}
+                  >
+                    Vendi ({formatMoney(Math.floor(calculateBuildingCost(building.type, building.level) * 0.5))})
+                  </button>
                 </div>
               ))
             )}
