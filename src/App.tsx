@@ -26,7 +26,9 @@ export default function App() {
       const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
       
       if (authError || !authUser) {
-        setError('Not authenticated')
+        // Non è un errore: l'utente semplicemente non ha ancora fatto login.
+        setUser(null)
+        setGameState(null)
         setIsLoading(false)
         return
       }
@@ -310,8 +312,8 @@ export default function App() {
   }
 
   if (isLoading) return <div className="loading">Loading...</div>
-  if (error) return <div className="error">Error: {error}</div>
   if (!gameState || !user) return <LoginComponent onLoad={loadGame} />
+  if (error) return <div className="error">Error: {error}</div>
 
   const totalIncome = gameState.buildings.reduce((sum, b) =>
     sum + calculateBuildingIncome(b.type, b.level), 0
