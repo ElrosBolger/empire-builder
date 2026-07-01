@@ -274,7 +274,25 @@ body {
   border-radius: 4px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 10px;
   font-size: 14px;
+}
+
+.sell-button {
+  background: rgba(220, 38, 38, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.sell-button:hover {
+  background: rgba(220, 38, 38, 0.3);
 }
 
 .empty {
