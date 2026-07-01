@@ -92,8 +92,9 @@ export function calculateMultiplierCost(currentMultiplier: number): number {
 }
 
 // Calcola livello (lato server, non fidarsi del client!)
-export function calculateLevel(money: number, totalIncome: number): number {
-  const baseLevel = Math.floor(Math.log2(Math.max(1, money / 1000))) + 1
+export function calculateLevel(totalEarned: number, totalIncome: number): number {
+  // Il livello si basa sul totale guadagnato (sale sempre, non scende mai)
+  const baseLevel = Math.floor(Math.log2(Math.max(1, totalEarned / 1000))) + 1
   const incomeBonus = Math.floor(Math.log10(Math.max(1, totalIncome / 10)))
   return Math.max(1, baseLevel + incomeBonus)
 }
