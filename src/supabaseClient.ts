@@ -1,11 +1,12 @@
+/// <reference types="vite/client" />
 // supabaseClient.ts
 // Connessione Supabase con anti-cheat
 
 import { createClient } from '@supabase/supabase-js'
 
 // ⚠️ SOSTITUISCI CON I TUOI VALORI DA SUPABASE
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || https://devygqyacutmhwtaresy.supabase.co
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || sb_publishable_K8dY43kHsipH24CYej3o-A_les7y_5d
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://devygqyacutmhwtaresy.supabase.co'
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || 'sb_publishable_K8dY43kHsipH24CYej3o-A_les7y_5d'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
