@@ -521,3 +521,40 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #64748b;
 }
+
+/* Selettore moltiplicatore */
+.multiplier-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.multiplier-label {
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.multiplier-btn {
+  padding: 6px 16px;
+  background: rgba(30, 41, 59, 0.8);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+
+.multiplier-btn:hover {
+  background: rgba(51, 65, 85, 0.9);
+}
+
+.multiplier-btn.active {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
