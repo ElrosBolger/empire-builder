@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react'
 import type { GameState, Building } from './types'
-import { supabase, verifyBuildingAction, calculatePlayerIncomeServer, calculatePrestigeMilestone, signOut } from './supabaseClient'
+import { supabase, verifyBuildingAction, calculatePlayerIncomeServer, signOut } from './supabaseClient'
 import { calculateLevel, calculateBuildingCost, calculateBuildingIncome, calculatePrestigeGain, calculatePrestigeBonus, getAvailableBuildingsAtLevel } from './buildings'
 import { formatMoney, formatIncome, formatTime } from './formatting'
 import './App.css'
