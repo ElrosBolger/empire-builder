@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react'
 import type { GameState, Building } from './types'
 import { supabase, verifyBuildingAction, signOut } from './supabaseClient'
-import { calculateLevel, calculateBuildingCost, calculateBuildingIncome, calculatePrestigeGain, calculatePrestigeBonus, getAvailableBuildingsAtLevel, calculateTotalSlots, calculateSlotCost } from './buildings'
+import { calculateLevel, calculateBuildingCost, calculateBuildingIncome, calculatePrestigeGain, calculatePrestigeBonus, getAvailableBuildingsAtLevel, calculateTotalSlots, calculateSlotCost, calculateUpgradeBatch } from './buildings'
 import { formatMoney, formatIncome, formatTime } from './formatting'
 import './App.css'
 
@@ -14,6 +14,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [user, setUser] = useState<any>(null)
   const [showPrestigeModal, setShowPrestigeModal] = useState(false)
+  const [multiplier, setMultiplier] = useState(1)
 
   // Carica gioco al mount
   useEffect(() => {
@@ -333,21 +334,28 @@ export default function App() {
     if (!gameState) return
 
     try {
-      const nextLevel = building.level + 1
-      const cost = calculateBuildingCost(building.type, nextLevel)
+      // Calcola quanti livelli si possono comprare col moltiplicatore e i soldi disponibili
+      const batch = calculateUpgradeBatch(
+        building.type,
+        building.level,
+        multiplier,
+        gameState.money
+      )
 
-      // Controllo fondi (verrà validato anche lato server)
-      if (gameState.money < cost) {
+      if (batch.levels === 0) {
         alert('Fondi insufficienti per il potenziamento')
         return
       }
 
+      const targetLevel = building.level + batch.levels
+      const cost = batch.totalCost
+
       // Conferma esplicita dell'acquisto
       const incomeNow = calculateBuildingIncome(building.type, building.level)
-      const incomeNext = calculateBuildingIncome(building.type, nextLevel)
+      const incomeNext = calculateBuildingIncome(building.type, targetLevel)
       const conferma = window.confirm(
-        `Potenziare ${building.type} al livello ${nextLevel}?\n\n` +
-        `Costo: ${formatMoney(cost)}\n` +
+        `Potenziare ${building.type} di ${batch.levels} liv. (Lv${building.level} → Lv${targetLevel})?\n\n` +
+        `Costo totale: ${formatMoney(cost)}\n` +
         `Reddito: ${formatIncome(incomeNow)} → ${formatIncome(incomeNext)}`
       )
       if (!conferma) return
@@ -355,7 +363,7 @@ export default function App() {
       // Sincronizza il denaro reale col server PRIMA della verifica anti-cheat
       await syncMoneyToServer()
 
-      // Anti-cheat: verifica lato server
+      // Anti-cheat: verifica lato server (sul costo totale)
       const { data: verification, error: verifyError } = await verifyBuildingAction(
         gameState.user_id,
         'upgrade',
@@ -374,7 +382,7 @@ export default function App() {
       // 1. Aggiorna il livello dell'edificio nel DB
       const { error: updError } = await supabase
         .from('buildings')
-        .update({ level: nextLevel })
+        .update({ level: targetLevel })
         .eq('id', building.id)
 
       if (updError) {
@@ -407,7 +415,7 @@ export default function App() {
         ...gameState,
         money: newMoney,
         buildings: gameState.buildings.map(b =>
-          b.id === building.id ? { ...b, level: nextLevel } : b
+          b.id === building.id ? { ...b, level: targetLevel } : b
         )
       })
     } catch (err) {
@@ -649,6 +657,20 @@ export default function App() {
 
       {/* Main Game */}
       <main className="game-main">
+        {/* Selettore moltiplicatore globale */}
+        <div className="multiplier-bar">
+          <span className="multiplier-label">Quantità:</span>
+          {[1, 5, 10, 100].map(m => (
+            <button
+              key={m}
+              className={`multiplier-btn ${multiplier === m ? 'active' : ''}`}
+              onClick={() => setMultiplier(m)}
+            >
+              x{m}
+            </button>
+          ))}
+        </div>
+
         {/* Buildings Grid */}
         <div className="buildings-section">
           <h2>🏗️ Costruisci</h2>
@@ -693,13 +715,18 @@ export default function App() {
                 <div key={building.id} className="property-item">
                   <span>{building.type} Lv{building.level}</span>
                   <span>{formatIncome(calculateBuildingIncome(building.type, building.level))}</span>
-                  <button
-                    className="upgrade-button"
-                    onClick={() => upgradeBuilding(building)}
-                    disabled={gameState.money < calculateBuildingCost(building.type, building.level + 1)}
-                  >
-                    ⬆ Upgrade ({formatMoney(calculateBuildingCost(building.type, building.level + 1))})
-                  </button>
+                  {(() => {
+                    const batch = calculateUpgradeBatch(building.type, building.level, multiplier)
+                    return (
+                      <button
+                        className="upgrade-button"
+                        onClick={() => upgradeBuilding(building)}
+                        disabled={gameState.money < calculateBuildingCost(building.type, building.level + 1)}
+                      >
+                        ⬆ Upgrade x{multiplier} ({formatMoney(batch.totalCost)})
+                      </button>
+                    )
+                  })()}
                   <button
                     className="sell-button"
                     onClick={() => sellBuilding(building)}
