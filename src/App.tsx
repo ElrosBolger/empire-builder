@@ -170,6 +170,25 @@ export default function App() {
     return () => clearInterval(interval)
   }, [gameState?.user_id])
 
+  // Salva subito il denaro corrente nel DB, così l'anti-cheat vede il valore reale
+  async function syncMoneyToServer(): Promise<boolean> {
+    if (!gameState) return false
+    try {
+      const { error } = await supabase
+        .from('game_state')
+        .update({
+          money: gameState.money,
+          level: gameState.level,
+          total_money_earned: gameState.total_money_earned,
+          last_sync: new Date()
+        })
+        .eq('user_id', gameState.user_id)
+      return !error
+    } catch {
+      return false
+    }
+  }
+
   // Build building (con anti-cheat server)
   async function buildBuilding(buildingType: string) {
     if (!gameState) return
@@ -183,6 +202,9 @@ export default function App() {
     try {
       const timestamp = Date.now()
       const cost = calculateBuildingCost(buildingType, 1)
+
+      // 0. Sincronizza il denaro reale col server PRIMA della verifica anti-cheat
+      await syncMoneyToServer()
 
       // 1. VERIFICA SERVER-SIDE (anti-cheat!)
       const { data: verification, error: verifyError } = await verifyBuildingAction(
@@ -319,6 +341,9 @@ export default function App() {
         alert('Fondi insufficienti per il potenziamento')
         return
       }
+
+      // Sincronizza il denaro reale col server PRIMA della verifica anti-cheat
+      await syncMoneyToServer()
 
       // Anti-cheat: verifica lato server
       const { data: verification, error: verifyError } = await verifyBuildingAction(
