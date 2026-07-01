@@ -21,6 +21,7 @@ export type GameState = {
   total_buildings_built?: number
   play_time_seconds: number
   slots: number
+  bought_slots?: number
   buildings: Building[]
   last_sync: Date
   updated_at?: string
