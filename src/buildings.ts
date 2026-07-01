@@ -137,3 +137,17 @@ export function calculatePrestigeBonus(prestige: number) {
     slotBonus: Math.floor(sqrt / Math.sqrt(10)) // +1 ogni sqrt(100)
   }
 }
+
+// Slot base di partenza
+export const BASE_SLOTS = 12
+
+// Slot totali = base + bonus prestige + slot comprati con denaro
+export function calculateTotalSlots(prestige: number, boughtSlots: number): number {
+  const bonus = calculatePrestigeBonus(prestige)
+  return BASE_SLOTS + bonus.slotBonus + boughtSlots
+}
+
+// Costo del prossimo slot comprabile: cresce esponenzialmente (anti-exploit)
+export function calculateSlotCost(boughtSlots: number): number {
+  return Math.floor(50000 * Math.pow(2.5, boughtSlots))
+}
