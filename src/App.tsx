@@ -112,12 +112,14 @@ export default function App() {
         if (!error && income > 0) {
           const newMoney = gameState.money + income
           const newPlayTime = (gameState.play_time_seconds || 0) + 30
+          // Il reddito guadagnato si somma al totale di sempre
+          const newTotalEarned = (gameState.total_money_earned || 0) + income
 
-          // 2. Calcola level
+          // 2. Calcola level sul totale guadagnato (non scende mai)
           const totalIncome = gameState.buildings.reduce((sum, b) => 
             sum + calculateBuildingIncome(b.type, b.level), 0
           )
-          const newLevel = calculateLevel(newMoney, totalIncome)
+          const newLevel = calculateLevel(newTotalEarned, totalIncome)
 
           // 3. Salva nel DB
           await supabase
@@ -125,6 +127,7 @@ export default function App() {
             .update({
               money: newMoney,
               level: newLevel,
+              total_money_earned: newTotalEarned,
               play_time_seconds: newPlayTime,
               last_sync: new Date()
             })
@@ -140,7 +143,8 @@ export default function App() {
             ...prev,
             money: newMoney,
             level: newLevel,
-            playTimeSeconds: newPlayTime,
+            total_money_earned: newTotalEarned,
+            play_time_seconds: newPlayTime,
             last_sync: new Date()
           } : null)
         }
@@ -211,12 +215,11 @@ export default function App() {
           multiplier: 0
         })
 
-      // 5. SALVA GAME STATE
+      // 5. SALVA GAME STATE (costruire è una spesa: total_money_earned NON cambia)
       await supabase
         .from('game_state')
         .update({
-          money: newMoney,
-          total_money_earned: gameState.total_money_earned + cost
+          money: newMoney
         })
         .eq('user_id', gameState.user_id)
 
@@ -224,8 +227,7 @@ export default function App() {
       setGameState({
         ...gameState,
         money: newMoney,
-        buildings: [...gameState.buildings, newBuilding],
-        total_money_earned: gameState.total_money_earned + cost
+        buildings: [...gameState.buildings, newBuilding]
       })
     } catch (err) {
       console.error('Build error:', err)
