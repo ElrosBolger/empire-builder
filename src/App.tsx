@@ -109,7 +109,7 @@ export default function App() {
 
         if (!error && income > 0) {
           const newMoney = gameState.money + income
-          const newPlayTime = gameState.playTimeSeconds + 30
+          const newPlayTime = (gameState.play_time_seconds || 0) + 30
 
           // 2. Calcola level
           const totalIncome = gameState.buildings.reduce((sum, b) => 
