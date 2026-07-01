@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react'
 import type { GameState, Building } from './types'
-import { supabase, verifyBuildingAction, calculatePlayerIncomeServer, signOut } from './supabaseClient'
+import { supabase, verifyBuildingAction, signOut } from './supabaseClient'
 import { calculateLevel, calculateBuildingCost, calculateBuildingIncome, calculatePrestigeGain, calculatePrestigeBonus, getAvailableBuildingsAtLevel, calculateTotalSlots, calculateSlotCost } from './buildings'
 import { formatMoney, formatIncome, formatTime } from './formatting'
 import './App.css'
@@ -102,61 +102,73 @@ export default function App() {
     }
   }
 
-  // Sync periodico (reddito da server ogni 30 sec)
+  // Tick LOCALE ogni secondo: reddito fluido in tempo reale (solo UI, non salva)
+  useEffect(() => {
+    if (!gameState) return
+
+    const tick = setInterval(() => {
+      setGameState(prev => {
+        if (!prev) return null
+        // Reddito al secondo = somma del reddito di tutti gli edifici
+        const incomePerSecond = prev.buildings.reduce((sum, b) =>
+          sum + calculateBuildingIncome(b.type, b.level), 0
+        )
+        if (incomePerSecond <= 0) return prev
+
+        const newMoney = prev.money + incomePerSecond
+        const newTotalEarned = (prev.total_money_earned || 0) + incomePerSecond
+        const newLevel = calculateLevel(newTotalEarned, incomePerSecond)
+
+        // Popup prestige al raggiungimento di un nuovo milestone
+        if (newLevel > prev.level && newLevel % 10 === 0) {
+          setShowPrestigeModal(true)
+        }
+
+        return {
+          ...prev,
+          money: newMoney,
+          total_money_earned: newTotalEarned,
+          level: newLevel
+        }
+      })
+    }, 1000) // ogni secondo
+
+    return () => clearInterval(tick)
+  }, [gameState?.buildings])
+
+  // Salvataggio periodico sul server ogni 30 sec (anti-cheat + persistenza)
   useEffect(() => {
     if (!gameState) return
 
     const interval = setInterval(async () => {
       try {
-        // 1. Calcola reddito dal server (ANTI-CHEAT!)
-        const { income, error } = await calculatePlayerIncomeServer(gameState.user_id)
+        // Legge lo stato attuale dalla UI e lo salva nel DB
+        setGameState(prev => {
+          if (!prev) return null
+          const newPlayTime = (prev.play_time_seconds || 0) + 30
 
-        if (!error && income > 0) {
-          const newMoney = gameState.money + income
-          const newPlayTime = (gameState.play_time_seconds || 0) + 30
-          // Il reddito guadagnato si somma al totale di sempre
-          const newTotalEarned = (gameState.total_money_earned || 0) + income
-
-          // 2. Calcola level sul totale guadagnato (non scende mai)
-          const totalIncome = gameState.buildings.reduce((sum, b) => 
-            sum + calculateBuildingIncome(b.type, b.level), 0
-          )
-          const newLevel = calculateLevel(newTotalEarned, totalIncome)
-
-          // 3. Salva nel DB
-          await supabase
+          // Salvataggio asincrono (non blocca la UI)
+          supabase
             .from('game_state')
             .update({
-              money: newMoney,
-              level: newLevel,
-              total_money_earned: newTotalEarned,
+              money: prev.money,
+              level: prev.level,
+              total_money_earned: prev.total_money_earned,
               play_time_seconds: newPlayTime,
               last_sync: new Date()
             })
-            .eq('user_id', gameState.user_id)
+            .eq('user_id', prev.user_id)
+            .then(() => {})
 
-          // 4. Check prestige milestone
-          if (newLevel > gameState.level && newLevel % 10 === 0) {
-            setShowPrestigeModal(true)
-          }
-
-          // 5. Update UI
-          setGameState(prev => prev ? {
-            ...prev,
-            money: newMoney,
-            level: newLevel,
-            total_money_earned: newTotalEarned,
-            play_time_seconds: newPlayTime,
-            last_sync: new Date()
-          } : null)
-        }
+          return { ...prev, play_time_seconds: newPlayTime, last_sync: new Date() }
+        })
       } catch (err) {
-        console.error('Sync error:', err)
+        console.error('Save error:', err)
       }
     }, 30000) // 30 secondi
 
     return () => clearInterval(interval)
-  }, [gameState])
+  }, [gameState?.user_id])
 
   // Build building (con anti-cheat server)
   async function buildBuilding(buildingType: string) {
