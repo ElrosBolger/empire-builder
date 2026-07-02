@@ -524,6 +524,7 @@ body {
 
 /* Selettore moltiplicatore */
 .multiplier-bar {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -740,3 +741,14 @@ body {
 
 .username-modal { text-align: center; }
 .username-modal .login-input { margin: 16px 0; text-align: center; font-size: 16px; }
+
+.username-tag {
+  font-size: 14px;
+  font-weight: 500;
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.12);
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-left: 12px;
+  vertical-align: middle;
+}
