@@ -558,3 +558,101 @@ body {
   color: white;
   border-color: #3b82f6;
 }
+
+/* ===== ACHIEVEMENTS ===== */
+.btn-ach {
+  padding: 8px 16px;
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-ach:hover { background: #7c3aed; }
+
+.ach-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: white;
+  padding: 14px 24px;
+  border-radius: 10px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4);
+  z-index: 1000;
+  animation: toastIn 0.3s ease;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translate(-50%, 20px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.ach-modal {
+  background: #1e293b;
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 560px;
+  width: 92%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.ach-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.ach-modal-head h2 { margin: 0; color: #f1f5f9; font-size: 20px; }
+.ach-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.ach-close:hover { color: #f1f5f9; }
+.ach-total {
+  color: #a78bfa;
+  font-size: 14px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(148,163,184,0.15);
+}
+.ach-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ach-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.6);
+}
+.ach-item.done {
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+}
+.ach-item.locked { opacity: 0.55; }
+.ach-icon { font-size: 26px; width: 32px; text-align: center; }
+.ach-text { flex: 1; }
+.ach-name { font-weight: 600; color: #f1f5f9; font-size: 15px; }
+.ach-desc { font-size: 13px; color: #94a3b8; }
+.ach-reward {
+  font-weight: 700;
+  color: #34d399;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.ach-item.locked .ach-reward { color: #64748b; }
