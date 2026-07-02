@@ -24,6 +24,7 @@ export type GameState = {
   bought_slots?: number
   lifetime_buildings_built?: number
   lifetime_upgrades?: number
+  username?: string
   buildings: Building[]
   last_sync: Date
   updated_at?: string
