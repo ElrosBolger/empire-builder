@@ -21,6 +21,11 @@ export default function App() {
   const [achToast, setAchToast] = useState<string | null>(null)
   const stateRef = useRef<GameState | null>(null)
   stateRef.current = gameState
+  const [showLeaderboard, setShowLeaderboard] = useState(false)
+  const [leaderboard, setLeaderboard] = useState<any[]>([])
+  const [myRank, setMyRank] = useState<number | null>(null)
+  const [needUsername, setNeedUsername] = useState(false)
+  const [usernameInput, setUsernameInput] = useState('')
 
   // Carica gioco al mount
   useEffect(() => {
@@ -111,6 +116,9 @@ export default function App() {
         const { data: achRows } = await supabase
           .from('achievements').select('achievement_key').eq('user_id', au.id)
         setUnlockedAch(new Set((achRows || []).map((r: any) => r.achievement_key)))
+        const { data: gsRow } = await supabase
+          .from('game_state').select('username').eq('user_id', au.id).maybeSingle()
+        if (!gsRow?.username) setNeedUsername(true)
       }
     } catch (err) {
       console.error('Load error:', err)
@@ -185,6 +193,13 @@ export default function App() {
     }, 3000)
     return () => clearInterval(check)
   }, [gameState?.user_id, unlockedAch])
+
+  // Aggiorna la classifica ogni 30 secondi
+  useEffect(() => {
+    if (!gameState?.username) return
+    const push = setInterval(() => { pushToLeaderboard() }, 30000)
+    return () => clearInterval(push)
+  }, [gameState?.username])
 
   // Salvataggio periodico sul server ogni 30 sec (anti-cheat + persistenza)
   useEffect(() => {
@@ -673,6 +688,76 @@ export default function App() {
     setGameState(null)
   }
 
+  // Salva l'username scelto e lo iscrive alla classifica
+  async function saveUsername() {
+    if (!gameState) return
+    const name = usernameInput.trim().slice(0, 20)
+    if (name.length < 3) { alert('Scegli un nome di almeno 3 caratteri'); return }
+    if (!/^[A-Za-z0-9_ ]{3,20}$/.test(name)) {
+      alert('Solo lettere, numeri, spazi e underscore. Niente punteggiatura.')
+      return
+    }
+    try {
+      const { error: gsErr } = await supabase
+        .from('game_state').update({ username: name }).eq('user_id', gameState.user_id)
+      if (gsErr) {
+        if (gsErr.message.includes('duplicate') || gsErr.code === '23505') {
+          alert('Questo nome e\' gia\' in uso. Scegline un altro.')
+        } else {
+          alert('Errore: ' + gsErr.message)
+        }
+        return
+      }
+      const income = gameState.buildings.reduce((s, b) => s + calculateBuildingIncome(b.type, b.level), 0)
+      const { error: lbErr } = await supabase.from('leaderboard').upsert({
+        user_id: gameState.user_id, username: name,
+        prestige: gameState.prestige, level: gameState.level,
+        income: Math.floor(income), updated_at: new Date()
+      })
+      if (lbErr) {
+        if (lbErr.message.includes('duplicate') || lbErr.code === '23505') {
+          alert('Questo nome e\' gia\' in uso. Scegline un altro.')
+        } else {
+          alert('Errore: ' + lbErr.message)
+        }
+        return
+      }
+      setGameState({ ...gameState, username: name })
+      setNeedUsername(false)
+    } catch (err) {
+      alert('Errore: ' + (err instanceof Error ? err.message : 'sconosciuto'))
+    }
+  }
+
+  // Aggiorna la propria riga in classifica (chiamata periodicamente)
+  async function pushToLeaderboard() {
+    const s = stateRef.current
+    if (!s || !s.username) return
+    const income = s.buildings.reduce((sum, b) => sum + calculateBuildingIncome(b.type, b.level), 0)
+    await supabase.from('leaderboard').upsert({
+      user_id: s.user_id, username: s.username,
+      prestige: s.prestige, level: s.level,
+      income: Math.floor(income), updated_at: new Date()
+    })
+  }
+
+  // Carica la Top 100 e la propria posizione
+  async function openLeaderboard() {
+    setShowLeaderboard(true)
+    await pushToLeaderboard()
+    const { data } = await supabase
+      .from('leaderboard')
+      .select('username, prestige, level, income')
+      .order('prestige', { ascending: false })
+      .order('level', { ascending: false })
+      .limit(100)
+    setLeaderboard(data || [])
+    if (stateRef.current) {
+      const { data: rank } = await supabase.rpc('get_my_rank', { p_user_id: stateRef.current.user_id })
+      setMyRank(typeof rank === 'number' ? rank : null)
+    }
+  }
+
   if (isLoading) return <div className="loading">Loading...</div>
   if (!gameState || !user) return <LoginComponent onLoad={loadGame} />
   if (error) return <div className="error">Error: {error}</div>
@@ -696,6 +781,9 @@ export default function App() {
           </div>
         </div>
         <div className="header-right">
+          <button onClick={openLeaderboard} className="btn-lead">
+            🏆 Classifica
+          </button>
           <button onClick={() => setShowAchievements(true)} className="btn-ach">
             🏅 {unlockedAch.size}/{ACHIEVEMENTS.length}
           </button>
@@ -838,6 +926,49 @@ export default function App() {
                 )
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {showLeaderboard && (
+        <div className="modal-overlay" onClick={() => setShowLeaderboard(false)}>
+          <div className="lead-modal" onClick={e => e.stopPropagation()}>
+            <div className="lead-head">
+              <h2>🏆 Classifica Mondiale</h2>
+              <button className="ach-close" onClick={() => setShowLeaderboard(false)}>✕</button>
+            </div>
+            {myRank && <div className="lead-myrank">La tua posizione: <b>#{myRank}</b></div>}
+            <div className="lead-list">
+              <div className="lead-row lead-header-row">
+                <span className="lead-pos">#</span>
+                <span className="lead-name">Giocatore</span>
+                <span className="lead-val">⭐</span>
+                <span className="lead-val">🏆</span>
+              </div>
+              {leaderboard.map((p, i) => (
+                <div key={i} className={`lead-row ${p.username === gameState?.username ? 'me' : ''} ${i < 3 ? 'top3' : ''}`}>
+                  <span className="lead-pos">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</span>
+                  <span className="lead-name">{p.username}</span>
+                  <span className="lead-val">{p.prestige}</span>
+                  <span className="lead-val">Lv{p.level}</span>
+                </div>
+              ))}
+              {leaderboard.length === 0 && <p className="empty">Nessun giocatore ancora. Sii il primo!</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {needUsername && (
+        <div className="modal-overlay">
+          <div className="modal-content username-modal">
+            <h2>🎮 Scegli il tuo nome</h2>
+            <p>Questo nome apparirà nella classifica mondiale. Scegli con cura!</p>
+            <input className="login-input" placeholder="Il tuo nome (3-20 caratteri)"
+              value={usernameInput} maxLength={20}
+              onChange={e => setUsernameInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && saveUsername()} />
+            <button className="btn-primary" onClick={saveUsername}>Conferma</button>
           </div>
         </div>
       )}
