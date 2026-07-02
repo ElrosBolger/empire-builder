@@ -1,11 +1,12 @@
 // App.tsx
 // Main game component con anti-cheat Supabase
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { GameState, Building } from './types'
 import { supabase, verifyBuildingAction, signOut } from './supabaseClient'
 import { calculateLevel, calculateBuildingCost, calculateBuildingIncome, calculatePrestigeGain, calculatePrestigeBonus, getAvailableBuildingsAtLevel, calculateTotalSlots, calculateSlotCost, calculateUpgradeBatch } from './buildings'
 import { formatMoney, formatIncome, formatTime } from './formatting'
+import { ACHIEVEMENTS, achievementIncomeBonus, findNewlyReached } from './achievements'
 import './App.css'
 
 export default function App() {
@@ -15,6 +16,11 @@ export default function App() {
   const [user, setUser] = useState<any>(null)
   const [showPrestigeModal, setShowPrestigeModal] = useState(false)
   const [multiplier, setMultiplier] = useState(1)
+  const [unlockedAch, setUnlockedAch] = useState<Set<string>>(new Set())
+  const [showAchievements, setShowAchievements] = useState(false)
+  const [achToast, setAchToast] = useState<string | null>(null)
+  const stateRef = useRef<GameState | null>(null)
+  stateRef.current = gameState
 
   // Carica gioco al mount
   useEffect(() => {
@@ -70,6 +76,8 @@ export default function App() {
           prestige: created.prestige,
           slots: created.slots,
           bought_slots: created.bought_slots || 0,
+          lifetime_buildings_built: created.lifetime_buildings_built || 0,
+          lifetime_upgrades: created.lifetime_upgrades || 0,
           play_time_seconds: created.play_time_seconds,
           total_money_earned: created.total_money_earned,
           buildings: [],
@@ -89,11 +97,20 @@ export default function App() {
           prestige: gameData.prestige,
           slots: gameData.slots,
           bought_slots: gameData.bought_slots || 0,
+          lifetime_buildings_built: gameData.lifetime_buildings_built || 0,
+          lifetime_upgrades: gameData.lifetime_upgrades || 0,
           play_time_seconds: gameData.play_time_seconds,
           total_money_earned: gameData.total_money_earned,
           buildings: buildings || [],
           last_sync: new Date()
         })
+      }
+      // Carica gli achievement gia sbloccati
+      const { data: { user: au } } = await supabase.auth.getUser()
+      if (au) {
+        const { data: achRows } = await supabase
+          .from('achievements').select('achievement_key').eq('user_id', au.id)
+        setUnlockedAch(new Set((achRows || []).map((r: any) => r.achievement_key)))
       }
     } catch (err) {
       console.error('Load error:', err)
@@ -111,9 +128,10 @@ export default function App() {
       setGameState(prev => {
         if (!prev) return null
         // Reddito al secondo = somma del reddito di tutti gli edifici
+        const achBonus = 1 + achievementIncomeBonus(unlockedAch)
         const incomePerSecond = prev.buildings.reduce((sum, b) =>
           sum + calculateBuildingIncome(b.type, b.level), 0
-        )
+        ) * achBonus
         if (incomePerSecond <= 0) return prev
 
         const newMoney = prev.money + incomePerSecond
@@ -135,7 +153,38 @@ export default function App() {
     }, 1000) // ogni secondo
 
     return () => clearInterval(tick)
-  }, [gameState?.buildings])
+  }, [gameState?.buildings, unlockedAch])
+
+  // Controllo achievement ogni 3 secondi: sblocca i nuovi raggiunti
+  useEffect(() => {
+    if (!gameState) return
+    const check = setInterval(async () => {
+      const s = stateRef.current
+      if (!s) return
+      const totalIncome = s.buildings.reduce((sum, b) => sum + calculateBuildingIncome(b.type, b.level), 0)
+      const ctx = {
+        state: s,
+        totalIncome,
+        lifetimeBuildings: s.lifetime_buildings_built || 0,
+        lifetimeUpgrades: s.lifetime_upgrades || 0
+      }
+      const newly = findNewlyReached(ctx, unlockedAch)
+      if (newly.length > 0) {
+        const keys = newly.map(a => a.key)
+        await supabase.from('achievements').insert(
+          keys.map(k => ({ user_id: s.user_id, achievement_key: k }))
+        )
+        setUnlockedAch(prev => {
+          const next = new Set(prev)
+          keys.forEach(k => next.add(k))
+          return next
+        })
+        setAchToast(`${newly[0].icon} ${newly[0].name} sbloccato! +${(newly[0].rewardIncome * 100).toFixed(0)}% reddito`)
+        setTimeout(() => setAchToast(null), 4000)
+      }
+    }, 3000)
+    return () => clearInterval(check)
+  }, [gameState?.user_id, unlockedAch])
 
   // Salvataggio periodico sul server ogni 30 sec (anti-cheat + persistenza)
   useEffect(() => {
@@ -258,11 +307,13 @@ export default function App() {
           multiplier: 0
         })
 
-      // 5. SALVA GAME STATE (costruire è una spesa: total_money_earned NON cambia)
+      // 5. SALVA GAME STATE (costruire e' una spesa: total_money_earned NON cambia)
+      const newLifetimeBuilt = ((gameState as any).lifetime_buildings_built || 0) + 1
       await supabase
         .from('game_state')
         .update({
-          money: newMoney
+          money: newMoney,
+          lifetime_buildings_built: newLifetimeBuilt
         })
         .eq('user_id', gameState.user_id)
 
@@ -270,8 +321,9 @@ export default function App() {
       setGameState({
         ...gameState,
         money: newMoney,
-        buildings: [...gameState.buildings, newBuilding]
-      })
+        buildings: [...gameState.buildings, newBuilding],
+        lifetime_buildings_built: newLifetimeBuilt
+      } as any)
     } catch (err) {
       console.error('Build error:', err)
       alert('Build failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
@@ -393,7 +445,7 @@ export default function App() {
       // 2. Scala il denaro (total_money_earned NON cambia: è una spesa)
       await supabase
         .from('game_state')
-        .update({ money: newMoney })
+        .update({ money: newMoney, lifetime_upgrades: (((gameState as any).lifetime_upgrades || 0) + batch.levels) })
         .eq('user_id', gameState.user_id)
 
       // 3. Log transazione
@@ -416,8 +468,9 @@ export default function App() {
         money: newMoney,
         buildings: gameState.buildings.map(b =>
           b.id === building.id ? { ...b, level: targetLevel } : b
-        )
-      })
+        ),
+        lifetime_upgrades: (((gameState as any).lifetime_upgrades || 0) + batch.levels)
+      } as any)
     } catch (err) {
       console.error('Upgrade error:', err)
       alert('Upgrade fallito: ' + (err instanceof Error ? err.message : 'Unknown error'))
@@ -626,7 +679,7 @@ export default function App() {
 
   const totalIncome = gameState.buildings.reduce((sum, b) =>
     sum + calculateBuildingIncome(b.type, b.level), 0
-  )
+  ) * (1 + achievementIncomeBonus(unlockedAch))
   const availableBuildings = getAvailableBuildingsAtLevel(gameState.level)
   const prestigeGain = calculatePrestigeGain(gameState.level)
 
@@ -643,6 +696,9 @@ export default function App() {
           </div>
         </div>
         <div className="header-right">
+          <button onClick={() => setShowAchievements(true)} className="btn-ach">
+            🏅 {unlockedAch.size}/{ACHIEVEMENTS.length}
+          </button>
           <button
             onClick={handleManualReset}
             className="btn-reset"
@@ -753,6 +809,37 @@ export default function App() {
           gameState={gameState}
           onChoice={handlePrestigeChoice}
         />
+      )}
+
+      {achToast && <div className="ach-toast">{achToast}</div>}
+
+      {showAchievements && (
+        <div className="modal-overlay" onClick={() => setShowAchievements(false)}>
+          <div className="ach-modal" onClick={e => e.stopPropagation()}>
+            <div className="ach-modal-head">
+              <h2>🏅 Achievement ({unlockedAch.size}/{ACHIEVEMENTS.length})</h2>
+              <button className="ach-close" onClick={() => setShowAchievements(false)}>✕</button>
+            </div>
+            <div className="ach-total">
+              Bonus reddito totale: <b>+{(achievementIncomeBonus(unlockedAch) * 100).toFixed(0)}%</b>
+            </div>
+            <div className="ach-list">
+              {ACHIEVEMENTS.map(a => {
+                const done = unlockedAch.has(a.key)
+                return (
+                  <div key={a.key} className={`ach-item ${done ? 'done' : 'locked'}`}>
+                    <span className="ach-icon">{done ? a.icon : '🔒'}</span>
+                    <div className="ach-text">
+                      <div className="ach-name">{a.name}</div>
+                      <div className="ach-desc">{a.description}</div>
+                    </div>
+                    <div className="ach-reward">+{(a.rewardIncome * 100).toFixed(0)}%</div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
