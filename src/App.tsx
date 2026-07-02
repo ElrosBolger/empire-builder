@@ -773,7 +773,7 @@ export default function App() {
       {/* Header */}
       <header className="game-header">
         <div className="header-left">
-          <h1>🏙️ Empire Builder</h1>
+          <h1>🏙️ Empire Builder{gameState.username ? <span className="username-tag">👤 {gameState.username}</span> : null}</h1>
           <div className="header-stats">
             <div className="stat">💰 {formatMoney(gameState.money)}</div>
             <div className="stat">⭐ Prestige: {gameState.prestige}</div>
