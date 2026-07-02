@@ -66,95 +66,59 @@ export const BUILDINGS: Record<string, BuildingType> = {
   }
 }
 
-// Calcola costo di un edificio (anti-cheat: verificare anche server-side!)
 export function calculateBuildingCost(type: string, level: number): number {
   const building = BUILDINGS[type]
   if (!building) return 0
-
-  return Math.floor(
-    building.baseCost * Math.pow(building.costMultiplier, level - 1)
-  )
+  return Math.floor(building.baseCost * Math.pow(building.costMultiplier, level - 1))
 }
 
-// Calcola reddito base di un edificio (senza moltiplicatori)
 export function calculateBuildingIncome(type: string, level: number): number {
   const building = BUILDINGS[type]
   if (!building) return 0
-
-  return Math.floor(
-    building.baseIncome * Math.pow(building.incomeMultiplier, level - 1)
-  )
+  return Math.floor(building.baseIncome * Math.pow(building.incomeMultiplier, level - 1))
 }
 
-// Calcola costo moltiplicatore per edificio
-export function calculateMultiplierCost(currentMultiplier: number): number {
-  return Math.floor(1000 * Math.pow(1.5, currentMultiplier / 5))
-}
-
-// Calcola livello (lato server, non fidarsi del client!)
 export function calculateLevel(totalEarned: number, totalIncome: number): number {
-  // Il livello si basa sul totale guadagnato (sale sempre, non scende mai)
   const baseLevel = Math.floor(Math.log2(Math.max(1, totalEarned / 1000))) + 1
   const incomeBonus = Math.floor(Math.log10(Math.max(1, totalIncome / 10)))
   return Math.max(1, baseLevel + incomeBonus)
 }
 
-// Verifica se edificio è sbloccato
 export function isBuildingUnlocked(buildingType: string, level: number): boolean {
   const building = BUILDINGS[buildingType]
   if (!building) return false
   return level >= building.unlockLevel
 }
 
-// Prendi tutti gli edifici disponibili a questo livello
 export function getAvailableBuildingsAtLevel(level: number): string[] {
-  return Object.keys(BUILDINGS).filter(type =>
-    isBuildingUnlocked(type, level)
-  )
+  return Object.keys(BUILDINGS).filter(type => isBuildingUnlocked(type, level))
 }
 
-// Calcola income totale da lista edifici
-export function calculateTotalIncome(buildings: Array<{ type: string; level: number; multiplier: number }>): number {
-  return buildings.reduce((total, building) => {
-    const baseIncome = calculateBuildingIncome(building.type, building.level)
-    const withMultiplier = baseIncome * (1 + building.multiplier / 100)
-    return total + withMultiplier
-  }, 0)
-}
-
-// Calcola milestone prestige (40% ridotto vs vecchio)
 export function calculatePrestigeGain(level: number): number {
   if (level % 10 !== 0) return 0
-  return Math.floor(level / 10) * 3 // Ridotto: era 5
+  return Math.floor(level / 10) * 3
 }
 
-// Calcola bonus prestige (66% ridotto!)
 export function calculatePrestigeBonus(prestige: number) {
   const sqrt = Math.sqrt(prestige)
   return {
-    incomeBonus: sqrt * 0.05,      // 0.05% per sqrt(prestige) - MOLTO SOFT
-    costBonus: sqrt * 0.015,       // 0.015% per sqrt(prestige)
-    slotBonus: Math.floor(sqrt / Math.sqrt(10)) // +1 ogni sqrt(100)
+    incomeBonus: sqrt * 0.05,
+    costBonus: sqrt * 0.015,
+    slotBonus: Math.floor(sqrt / Math.sqrt(10))
   }
 }
 
-// Slot base di partenza
 export const BASE_SLOTS = 12
 
-// Slot totali = base + bonus prestige + slot comprati con denaro
 export function calculateTotalSlots(prestige: number, boughtSlots: number): number {
   const bonus = calculatePrestigeBonus(prestige)
   return BASE_SLOTS + bonus.slotBonus + boughtSlots
 }
 
-// Costo del prossimo slot comprabile: cresce esponenzialmente (anti-exploit)
 export function calculateSlotCost(boughtSlots: number): number {
   return Math.floor(50000 * Math.pow(2.5, boughtSlots))
 }
 
-// Costo cumulativo per potenziare un edificio da fromLevel di `count` livelli.
-// Ritorna quanti livelli sono effettivamente acquistabili con il denaro disponibile
-// e il costo totale. Se money è undefined, calcola il costo pieno di `count` livelli.
 export function calculateUpgradeBatch(
   type: string,
   fromLevel: number,
@@ -170,9 +134,4 @@ export function calculateUpgradeBatch(
     levels++
   }
   return { levels, totalCost }
-}
-
-// Costo cumulativo per costruire `count` edifici dello stesso tipo (tutti a livello 1)
-export function calculateBuildBatchCost(type: string, count: number): number {
-  return calculateBuildingCost(type, 1) * count
 }
