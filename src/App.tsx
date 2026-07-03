@@ -107,6 +107,7 @@ export default function App() {
           play_time_seconds: gameData.play_time_seconds,
           total_money_earned: gameData.total_money_earned,
           buildings: buildings || [],
+          username: gameData.username || undefined,
           last_sync: new Date()
         })
       }
@@ -118,7 +119,11 @@ export default function App() {
         setUnlockedAch(new Set((achRows || []).map((r: any) => r.achievement_key)))
         const { data: gsRow } = await supabase
           .from('game_state').select('username').eq('user_id', au.id).maybeSingle()
-        if (!gsRow?.username) setNeedUsername(true)
+        if (!gsRow?.username) {
+          setNeedUsername(true)
+        } else {
+          setGameState(prev => prev ? { ...prev, username: gsRow.username } : prev)
+        }
       }
     } catch (err) {
       console.error('Load error:', err)
