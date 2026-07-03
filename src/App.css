@@ -132,13 +132,13 @@ body {
 
 .header-left {
   display: flex;
-  gap: 20px;
+  gap: 12px;
   align-items: center;
 }
 
-.game-header h1 {
-  font-size: 28px;
-  margin: 0;
+.header-logo {
+  font-size: 32px;
+  line-height: 1;
 }
 
 .header-stats {
@@ -745,10 +745,10 @@ body {
 .username-tag {
   font-size: 14px;
   font-weight: 500;
-  color: #94a3b8;
+  color: #cbd5e1;
   background: rgba(148, 163, 184, 0.12);
-  padding: 4px 10px;
+  padding: 6px 12px;
   border-radius: 20px;
-  margin-left: 12px;
-  vertical-align: middle;
+  white-space: nowrap;
+  margin-right: 8px;
 }
