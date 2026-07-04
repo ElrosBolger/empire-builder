@@ -16,6 +16,7 @@ export default function App() {
   const [user, setUser] = useState<any>(null)
   const [showPrestigeModal, setShowPrestigeModal] = useState(false)
   const [multiplier, setMultiplier] = useState(1)
+  const [multiplierOpen, setMultiplierOpen] = useState(false)
   const [unlockedAch, setUnlockedAch] = useState<Set<string>>(new Set())
   const [showAchievements, setShowAchievements] = useState(false)
   const [achToast, setAchToast] = useState<string | null>(null)
@@ -503,15 +504,26 @@ export default function App() {
 
     try {
       const bought = gameState.bought_slots || 0
-      const cost = calculateSlotCost(bought)
 
-      if (gameState.money < cost) {
+      // Compra fino a `multiplier` slot, quanti ce ne stanno coi soldi disponibili
+      let totalCost = 0
+      let count = 0
+      let remaining = gameState.money
+      for (let i = 0; i < multiplier; i++) {
+        const stepCost = calculateSlotCost(bought + count)
+        if (stepCost > remaining) break
+        totalCost += stepCost
+        remaining -= stepCost
+        count++
+      }
+
+      if (count === 0) {
         alert('Fondi insufficienti per comprare uno slot')
         return
       }
 
-      const newMoney = gameState.money - cost
-      const newBought = bought + 1
+      const newMoney = gameState.money - totalCost
+      const newBought = bought + count
       const newSlots = calculateTotalSlots(gameState.prestige, newBought)
 
       // Salva nel DB
@@ -524,7 +536,7 @@ export default function App() {
       await supabase.from('transactions').insert({
         user_id: gameState.user_id,
         action: 'buy_slot',
-        cost_paid: cost,
+        cost_paid: totalCost,
         money_before: gameState.money,
         money_after: newMoney,
         level_before: gameState.level,
@@ -807,18 +819,33 @@ export default function App() {
 
       {/* Main Game */}
       <main className="game-main">
-        {/* Selettore moltiplicatore globale */}
+        {/* Selettore moltiplicatore globale (dropdown) */}
         <div className="multiplier-bar">
           <span className="multiplier-label">Quantità:</span>
-          {[1, 5, 10, 100].map(m => (
+          <div className="multiplier-dropdown">
             <button
-              key={m}
-              className={`multiplier-btn ${multiplier === m ? 'active' : ''}`}
-              onClick={() => setMultiplier(m)}
+              className="multiplier-current"
+              onClick={() => setMultiplierOpen(o => !o)}
             >
-              x{m}
+              x{multiplier} <span className="chevron">{multiplierOpen ? '▲' : '▼'}</span>
             </button>
-          ))}
+            {multiplierOpen && (
+              <>
+              <div className="multiplier-backdrop" onClick={() => setMultiplierOpen(false)} />
+              <div className="multiplier-menu">
+                {[1, 5, 10, 100].map(m => (
+                  <button
+                    key={m}
+                    className={`multiplier-option ${multiplier === m ? 'active' : ''}`}
+                    onClick={() => { setMultiplier(m); setMultiplierOpen(false) }}
+                  >
+                    x{m}
+                  </button>
+                ))}
+              </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Buildings Grid */}
@@ -849,13 +876,21 @@ export default function App() {
         <div className="properties-section">
           <div className="properties-header">
             <h2>🏘️ Proprietà ({gameState.buildings.length}/{gameState.slots})</h2>
-            <button
-              className="buy-slot-button"
-              onClick={buySlot}
-              disabled={gameState.money < calculateSlotCost(gameState.bought_slots || 0)}
-            >
-              ➕ Slot ({formatMoney(calculateSlotCost(gameState.bought_slots || 0))})
-            </button>
+            {(() => {
+              const bought = gameState.bought_slots || 0
+              let cost = 0
+              for (let i = 0; i < multiplier; i++) cost += calculateSlotCost(bought + i)
+              const affordable = gameState.money >= calculateSlotCost(bought)
+              return (
+                <button
+                  className="buy-slot-button"
+                  onClick={buySlot}
+                  disabled={!affordable}
+                >
+                  ➕ Slot x{multiplier} ({formatMoney(cost)})
+                </button>
+              )
+            })()}
           </div>
           <div className="properties-list">
             {gameState.buildings.length === 0 ? (
