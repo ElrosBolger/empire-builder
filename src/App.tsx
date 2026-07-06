@@ -819,35 +819,6 @@ export default function App() {
 
       {/* Main Game */}
       <main className="game-main">
-        {/* Selettore moltiplicatore globale (dropdown) */}
-        <div className="multiplier-bar">
-          <span className="multiplier-label">Quantità:</span>
-          <div className="multiplier-dropdown">
-            <button
-              className="multiplier-current"
-              onClick={() => setMultiplierOpen(o => !o)}
-            >
-              x{multiplier} <span className="chevron">{multiplierOpen ? '▲' : '▼'}</span>
-            </button>
-            {multiplierOpen && (
-              <>
-              <div className="multiplier-backdrop" onClick={() => setMultiplierOpen(false)} />
-              <div className="multiplier-menu">
-                {[1, 5, 10, 100].map(m => (
-                  <button
-                    key={m}
-                    className={`multiplier-option ${multiplier === m ? 'active' : ''}`}
-                    onClick={() => { setMultiplier(m); setMultiplierOpen(false) }}
-                  >
-                    x{m}
-                  </button>
-                ))}
-              </div>
-              </>
-            )}
-          </div>
-        </div>
-
         {/* Buildings Grid */}
         <div className="buildings-section">
           <h2>🏗️ Costruisci</h2>
@@ -876,6 +847,30 @@ export default function App() {
         <div className="properties-section">
           <div className="properties-header">
             <h2>🏘️ Proprietà ({gameState.buildings.length}/{gameState.slots})</h2>
+            <div className="multiplier-dropdown">
+              <button
+                className="multiplier-current"
+                onClick={() => setMultiplierOpen(o => !o)}
+              >
+                x{multiplier} <span className="chevron">{multiplierOpen ? '▲' : '▼'}</span>
+              </button>
+              {multiplierOpen && (
+                <>
+                <div className="multiplier-backdrop" onClick={() => setMultiplierOpen(false)} />
+                <div className="multiplier-menu">
+                  {[1, 5, 10, 100].map(m => (
+                    <button
+                      key={m}
+                      className={`multiplier-option ${multiplier === m ? 'active' : ''}`}
+                      onClick={() => { setMultiplier(m); setMultiplierOpen(false) }}
+                    >
+                      x{m}
+                    </button>
+                  ))}
+                </div>
+                </>
+              )}
+            </div>
             {(() => {
               const bought = gameState.bought_slots || 0
               let cost = 0
