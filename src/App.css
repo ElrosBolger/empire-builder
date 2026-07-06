@@ -525,20 +525,6 @@ body {
 }
 
 /* Selettore moltiplicatore */
-.multiplier-bar {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-
-.multiplier-label {
-  color: #94a3b8;
-  font-size: 14px;
-  font-weight: 600;
-}
 
 .multiplier-dropdown {
   position: relative;
