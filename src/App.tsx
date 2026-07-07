@@ -1035,30 +1035,38 @@ export default function App() {
             {gameState.buildings.length === 0 ? (
               <p className="empty">Nessuna proprietà ancora</p>
             ) : (
-              gameState.buildings.map(building => (
-                <div key={building.id} className="property-item">
-                  <span>{building.type} Lv{building.level}</span>
-                  <span>{formatIncome(calculateBuildingIncome(building.type, building.level))}</span>
-                  {(() => {
-                    const batch = calculateUpgradeBatch(building.type, building.level, multiplier)
-                    return (
+              gameState.buildings.map(building => {
+                const cfg = BUILDINGS[building.type]
+                const batch = calculateUpgradeBatch(building.type, building.level, multiplier)
+                const targetLevel = building.level + Math.max(batch.levels, 1)
+                const incomeAfterUpgrade = calculateBuildingIncome(building.type, targetLevel)
+                const refund = Math.floor(calculateBuildingCost(building.type, building.level) * 0.5)
+                return (
+                  <div key={building.id} className="property-item">
+                    <div className="property-top">
+                      <span className="property-name">
+                        {cfg?.icon} {cfg?.name || building.type} <span className="property-level">Lv{building.level}</span>
+                      </span>
+                      <span className="property-income">{formatIncome(calculateBuildingIncome(building.type, building.level))}</span>
+                    </div>
+                    <div className="property-bottom">
                       <button
                         className="upgrade-button"
                         onClick={() => upgradeBuilding(building)}
                         disabled={gameState.money < calculateBuildingCost(building.type, building.level + 1)}
                       >
-                        ⬆ Upgrade x{multiplier} ({formatMoney(batch.totalCost)})
+                        ⬆ {formatMoney(batch.totalCost)} → {formatIncome(incomeAfterUpgrade)}
                       </button>
-                    )
-                  })()}
-                  <button
-                    className="sell-button"
-                    onClick={() => sellBuilding(building)}
-                  >
-                    Vendi ({formatMoney(Math.floor(calculateBuildingCost(building.type, building.level) * 0.5))})
-                  </button>
-                </div>
-              ))
+                      <button
+                        className="sell-button"
+                        onClick={() => sellBuilding(building)}
+                      >
+                        💸 {formatMoney(refund)}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })
             )}
           </div>
 
