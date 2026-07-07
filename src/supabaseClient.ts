@@ -1,19 +1,18 @@
-/// <reference types="vite/client" />
 // supabaseClient.ts
 // Connessione Supabase con anti-cheat
 
 import { createClient } from '@supabase/supabase-js'
 
 // ⚠️ SOSTITUISCI CON I TUOI VALORI DA SUPABASE
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://devygqyacutmhwtaresy.supabase.co'
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY || 'sb_publishable_K8dY43kHsipH24CYej3o-A_les7y_5d'
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || 'https://xxx.supabase.co'
+const SUPABASE_KEY = process.env.REACT_APP_SUPABASE_KEY || 'eyJ0eXAiOiJKV1QiLCJhbGc...'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
 // Test connessione
 export async function testConnection(): Promise<boolean> {
   try {
-    const { error } = await supabase.auth.getSession()
+    const { data, error } = await supabase.auth.getSession()
     console.log('🔐 Supabase connection:', error ? '❌ Failed' : '✅ Connected')
     return !error
   } catch (err) {
