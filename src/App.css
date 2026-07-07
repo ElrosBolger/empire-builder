@@ -225,7 +225,7 @@ body {
 
 .buildings-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 12px;
   margin-bottom: 20px;
 }
@@ -255,6 +255,56 @@ body {
   font-size: 12px;
   color: #cbd5e1;
   margin-bottom: 8px;
+}
+
+.building-desc {
+  font-size: 11px !important;
+  color: #64748b !important;
+  font-style: italic;
+  min-height: 28px;
+}
+
+/* Tier prestige: bordi che riflettono il pregio crescente */
+.building-card.tier-4 {
+  border-color: rgba(168, 85, 247, 0.5);
+}
+.building-card.tier-4:hover {
+  border-color: #a855f7;
+  box-shadow: 0 8px 16px rgba(168, 85, 247, 0.25);
+}
+.building-card.tier-5 {
+  border-color: rgba(250, 204, 21, 0.5);
+  background: linear-gradient(135deg, #292410 0%, #0f172a 100%);
+}
+.building-card.tier-5:hover {
+  border-color: #facc15;
+  box-shadow: 0 8px 20px rgba(250, 204, 21, 0.3);
+}
+
+/* Card bloccate: anteprima di ciò che si sblocca con più prestige */
+.building-card.locked {
+  opacity: 0.55;
+  filter: grayscale(0.4);
+  cursor: default;
+}
+.building-card.locked:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: #334155;
+}
+.building-card.locked.tier-4:hover,
+.building-card.locked.tier-5:hover {
+  border-color: inherit;
+}
+
+.lock-requirement {
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: rgba(148, 163, 184, 0.12);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fbbf24;
 }
 
 .btn-build {
@@ -787,4 +837,129 @@ body {
   inset: 0;
   z-index: 40;
   background: transparent;
+}
+
+/* ===== SISTEMA A CATEGORIE (sblocco per prestige) ===== */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.category-card {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border: 2px solid #334155;
+  border-radius: 10px;
+  padding: 20px 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.category-card.unlocked:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.25);
+  transform: translateY(-3px);
+}
+
+.category-card.locked {
+  opacity: 0.6;
+  filter: grayscale(0.5);
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.category-card.locked:hover {
+  opacity: 0.8;
+  border-color: #f59e0b;
+}
+
+.category-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+
+.category-name {
+  font-weight: 700;
+  font-size: 15px;
+  color: #f1f5f9;
+  margin-bottom: 4px;
+}
+
+.category-count {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.category-card.locked .category-count {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.category-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.category-detail-head h2 {
+  margin: 0;
+}
+
+.btn-back-categories {
+  padding: 8px 14px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.btn-back-categories:hover {
+  background: rgba(59, 130, 246, 0.3);
+}
+
+/* Popup categoria bloccata */
+.locked-category-modal {
+  text-align: center;
+  max-width: 420px;
+}
+
+.locked-modal-icon {
+  font-size: 48px;
+  margin-bottom: 8px;
+}
+
+.locked-modal-requirement {
+  color: #fbbf24;
+  font-size: 15px;
+  margin: 12px 0;
+}
+
+.locked-modal-message {
+  color: #cbd5e1;
+  font-size: 14px;
+  font-style: italic;
+  margin: 16px 0 24px;
+  line-height: 1.5;
+}
+
+.btn-back-locked {
+  padding: 12px 28px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 15px;
+  transition: background 0.15s;
+}
+
+.btn-back-locked:hover {
+  background: #2563eb;
 }
