@@ -37,6 +37,8 @@ export default function App() {
   const [showPrestigeModal, setShowPrestigeModal] = useState(false)
   const [multiplier, setMultiplier] = useState(1)
   const [multiplierOpen, setMultiplierOpen] = useState(false)
+  const [moneyPulse, setMoneyPulse] = useState(false)
+  const prevMoneyRef = useRef<number | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [lockedPopup, setLockedPopup] = useState<{ key: string; message: string } | null>(null)
   const [unlockedAch, setUnlockedAch] = useState<Set<string>>(new Set())
@@ -262,6 +264,20 @@ export default function App() {
 
     return () => clearInterval(interval)
   }, [gameState?.user_id])
+
+  // Piccolo lampo verde sul denaro ogni volta che aumenta: dà soddisfazione
+  // visiva immediata, tipica dei giochi idle ben fatti.
+  useEffect(() => {
+    if (!gameState) return
+    const prev = prevMoneyRef.current
+    if (prev !== null && gameState.money > prev) {
+      setMoneyPulse(true)
+      const t = setTimeout(() => setMoneyPulse(false), 450)
+      prevMoneyRef.current = gameState.money
+      return () => clearTimeout(t)
+    }
+    prevMoneyRef.current = gameState.money
+  }, [gameState?.money])
 
   // Salva subito il denaro corrente nel DB, così l'anti-cheat vede il valore reale
   async function syncMoneyToServer(): Promise<boolean> {
@@ -923,7 +939,12 @@ export default function App() {
     }
   }
 
-  if (isLoading) return <div className="loading">Loading...</div>
+  if (isLoading) return (
+    <div className="loading">
+      <div className="loading-spinner" />
+      <p>Caricamento impero in corso…</p>
+    </div>
+  )
   if (!gameState || !user) return <LoginComponent onLoad={loadGame} />
   if (error) return <div className="error">Error: {error}</div>
 
@@ -944,7 +965,7 @@ export default function App() {
           <span className="header-logo">🏙️</span>
           {gameState.username && <span className="username-tag">👤 {gameState.username}</span>}
           <div className="header-stats">
-            <div className="stat">💰 {formatMoney(gameState.money)}</div>
+            <div className={`stat stat-money ${moneyPulse ? 'pulse' : ''}`}>💰 {formatMoney(gameState.money)}</div>
             <div className="stat">⭐ Prestige: {gameState.prestige}</div>
             <div className="stat">📈 {formatIncome(totalIncome)}</div>
           </div>
@@ -1287,6 +1308,7 @@ function LoginComponent({ onLoad }: { onLoad: () => void }) {
     <div className="login-container">
       <div className="login-box">
         <h1>🏙️ Empire Builder</h1>
+        <p className="login-tagline">Costruisci il tuo impero, un mattone alla volta.</p>
         <input
           type="email"
           placeholder="Email"
