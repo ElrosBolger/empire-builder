@@ -337,14 +337,24 @@ body {
   border: 1px solid #334155;
   border-radius: 8px;
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  /* Altezza fissa del pannello: titolo e barra pulsanti non si spostano mai,
+     solo la lista in mezzo scorre se le proprietà non ci stanno tutte. */
+  height: 70vh;
+  max-height: 640px;
 }
 
 .properties-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 400px;
+  flex: 1;
+  min-height: 0; /* essenziale: permette alla lista di scorrere invece di spingere il pannello */
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 10px 0;
+  padding-right: 4px;
 }
 
 .property-item {
@@ -401,7 +411,22 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-shrink: 0; /* il titolo resta sempre in cima, non si schiaccia mai */
+}
+
+/* Barra fissa in fondo al pannello: sempre alla stessa altezza, non si sposta
+   mai indipendentemente da quante proprietà ci sono nella lista sopra. */
+.properties-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.footer-multiplier {
+  margin-left: auto; /* spinge il moltiplicatore in basso a destra */
 }
 
 .buy-slot-button {
@@ -614,6 +639,15 @@ body {
   box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   z-index: 50;
   min-width: 90px;
+}
+
+/* Nel footer il menu si apre verso l'ALTO (non verso il basso, che uscirebbe
+   dallo schermo essendo il pulsante ormai in fondo al pannello) */
+.multiplier-menu-up {
+  top: auto;
+  bottom: calc(100% + 6px);
+  left: auto;
+  right: 0;
 }
 
 .multiplier-option {
