@@ -840,10 +840,39 @@ body {
 }
 
 /* ===== SISTEMA A CATEGORIE (sblocco per prestige) ===== */
-.category-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+/* Piramide: righe centrate che si restringono verso l'apice (in cima) */
+.pyramid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+
+.pyramid-row {
+  display: flex;
+  justify-content: center;
   gap: 14px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.pyramid-row-4 .category-card {
+  border-color: #fbbf24;
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.25);
+  min-width: 200px;
+}
+
+.pyramid-row-4 .category-icon {
+  font-size: 44px;
+}
+
+.pyramid-row-3 .category-card {
+  border-color: rgba(251, 191, 36, 0.5);
+}
+
+.pyramid-row-1 .category-card,
+.pyramid-row-2 .category-card {
+  min-width: 150px;
 }
 
 .category-card {
