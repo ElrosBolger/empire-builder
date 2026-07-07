@@ -102,6 +102,7 @@ export type BuildingCategory = {
   unlockPrestige: number
   buildings: string[]
   description: string
+  pyramidRow: number // 1 = base (più categorie, meno remunerative), 4 = apice (la migliore, da sola)
 }
 
 export type PrestigeBonus = {
