@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { GameState, Building } from './types'
 import { supabase, verifyBuildingAction, signOut } from './supabaseClient'
-import { calculateLevel, calculateBuildingCost, calculateBuildingIncome, calculatePrestigeGain, calculatePrestigeBonus, calculateTotalSlots, calculateSlotCost, calculateUpgradeBatch, BUILDINGS, CATEGORIES, isCategoryUnlocked, getUnlockedCategories, getNextLockedCategory } from './buildings'
+import { calculateLevel, calculateBuildingCost, calculateBuildingIncome, calculatePrestigeGain, calculatePrestigeBonus, calculateTotalSlots, calculateSlotCost, calculateUpgradeBatch, BUILDINGS, CATEGORIES, isCategoryUnlocked, getUnlockedCategories, getNextLockedCategory, groupCategoriesByPyramidRow } from './buildings'
 import { formatMoney, formatIncome, formatTime } from './formatting'
 import { ACHIEVEMENTS, achievementIncomeBonus, findNewlyReached } from './achievements'
 import './App.css'
@@ -867,32 +867,40 @@ export default function App() {
         <div className="buildings-section">
           {!selectedCategory ? (
             <>
-              <h2>🏗️ Costruisci</h2>
-              <div className="category-grid">
-                {unlockedCategories.map(cat => (
-                  <div
-                    key={cat.key}
-                    className="category-card unlocked"
-                    onClick={() => openCategory(cat.key)}
-                  >
-                    <div className="category-icon">{cat.icon}</div>
-                    <div className="category-name">{cat.name}</div>
-                    <div className="category-count">{cat.buildings.length} edifici</div>
-                  </div>
-                ))}
-
-                {/* Solo la PROSSIMA categoria bloccata: un'anteprima, non tutte le altre */}
-                {nextLockedCategory && (
-                  <div
-                    key={nextLockedCategory.key}
-                    className="category-card locked"
-                    onClick={() => openCategory(nextLockedCategory.key)}
-                  >
-                    <div className="category-icon">🔒</div>
-                    <div className="category-name">{nextLockedCategory.name}</div>
-                    <div className="category-count">Richiede ⭐ {nextLockedCategory.unlockPrestige} Prestige</div>
-                  </div>
-                )}
+              <h2>🏗️ Costruisci — La Piramide dell'Impero</h2>
+              <div className="pyramid-container">
+                {(() => {
+                  // Mostra solo le categorie sbloccate + la sola prossima bloccata (anteprima)
+                  const visible = [...unlockedCategories]
+                  if (nextLockedCategory) visible.push(nextLockedCategory)
+                  const byRow = groupCategoriesByPyramidRow(visible)
+                  // Righe dall'apice (4) alla base (1): l'apice va disegnato in cima
+                  const rowNumbers = [4, 3, 2, 1]
+                  return rowNumbers.map(rowNum => {
+                    const catsInRow = byRow[rowNum]
+                    if (!catsInRow || catsInRow.length === 0) return null
+                    return (
+                      <div key={rowNum} className={`pyramid-row pyramid-row-${rowNum}`}>
+                        {catsInRow.map(cat => {
+                          const unlocked = isCategoryUnlocked(cat.key, gameState.prestige)
+                          return (
+                            <div
+                              key={cat.key}
+                              className={`category-card ${unlocked ? 'unlocked' : 'locked'}`}
+                              onClick={() => openCategory(cat.key)}
+                            >
+                              <div className="category-icon">{unlocked ? cat.icon : '🔒'}</div>
+                              <div className="category-name">{cat.name}</div>
+                              <div className="category-count">
+                                {unlocked ? `${cat.buildings.length} edifici` : `Richiede ⭐ ${cat.unlockPrestige} Prestige`}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })
+                })()}
               </div>
             </>
           ) : (
