@@ -216,6 +216,10 @@ body {
 }
 
 /* Buildings Section */
+.buildings-section {
+  align-self: start; /* la griglia non lo stira per adattarsi al pannello accanto */
+}
+
 .buildings-section h2,
 .properties-section h2 {
   font-size: 20px;
@@ -339,10 +343,13 @@ body {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  /* Altezza fissa del pannello: titolo e barra pulsanti non si spostano mai,
-     solo la lista in mezzo scorre se le proprietà non ci stanno tutte. */
-  height: 70vh;
-  max-height: 640px;
+  /* Altezza fissa e standard, SEMPRE uguale: 0 proprietà o 50, il pannello
+     resta identico. Pixel fissi (non vh) per non dipendere dal viewport
+     mobile che cambia con la barra degli indirizzi. align-self impedisce
+     alla griglia di stirare il pannello in base alla colonna accanto. */
+  height: 600px;
+  align-self: start;
+  overflow: hidden;
 }
 
 .properties-list {
