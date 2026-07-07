@@ -38,7 +38,6 @@ export default function App() {
   const [multiplier, setMultiplier] = useState(1)
   const [multiplierOpen, setMultiplierOpen] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
-  const [lastViewedCategory, setLastViewedCategory] = useState<string>('residential')
   const [lockedPopup, setLockedPopup] = useState<{ key: string; message: string } | null>(null)
   const [unlockedAch, setUnlockedAch] = useState<Set<string>>(new Set())
   const [showAchievements, setShowAchievements] = useState(false)
@@ -290,15 +289,16 @@ export default function App() {
     if (!gameState) return
     if (isCategoryUnlocked(categoryKey, gameState.prestige)) {
       setSelectedCategory(categoryKey)
-      setLastViewedCategory(categoryKey)
       setLockedPopup(null)
     } else {
       setLockedPopup({ key: categoryKey, message: randomEncouragement() })
     }
   }
 
+  // Il pulsante del popup di blocco riporta SEMPRE alla schermata di selezione
+  // delle categorie (la piramide), non a una categoria specifica.
   function backToLastCategory() {
-    setSelectedCategory(lastViewedCategory)
+    setSelectedCategory(null)
     setLockedPopup(null)
   }
 
@@ -612,31 +612,22 @@ export default function App() {
   }
 
   // Compra uno slot extra con denaro (costo esponenziale)
+  // Compra sempre UN SOLO slot per click: azione indipendente dal moltiplicatore
+  // globale (che serve solo per gli upgrade), così non si svuota il conto per sbaglio.
   async function buySlot() {
     if (!gameState) return
 
     try {
       const bought = gameState.bought_slots || 0
+      const cost = calculateSlotCost(bought)
 
-      // Compra fino a `multiplier` slot, quanti ce ne stanno coi soldi disponibili
-      let totalCost = 0
-      let count = 0
-      let remaining = gameState.money
-      for (let i = 0; i < multiplier; i++) {
-        const stepCost = calculateSlotCost(bought + count)
-        if (stepCost > remaining) break
-        totalCost += stepCost
-        remaining -= stepCost
-        count++
-      }
-
-      if (count === 0) {
+      if (gameState.money < cost) {
         alert('Fondi insufficienti per comprare uno slot')
         return
       }
 
-      const newMoney = gameState.money - totalCost
-      const newBought = bought + count
+      const newMoney = gameState.money - cost
+      const newBought = bought + 1
       const newSlots = calculateTotalSlots(gameState.prestige, newBought)
 
       // Salva nel DB
@@ -649,7 +640,7 @@ export default function App() {
       await supabase.from('transactions').insert({
         user_id: gameState.user_id,
         action: 'buy_slot',
-        cost_paid: totalCost,
+        cost_paid: cost,
         money_before: gameState.money,
         money_after: newMoney,
         level_before: gameState.level,
@@ -1034,55 +1025,12 @@ export default function App() {
 
         {/* Properties List */}
         <div className="properties-section">
+          {/* Titolo: fisso in alto */}
           <div className="properties-header">
             <h2>🏘️ Proprietà ({gameState.buildings.length}/{gameState.slots})</h2>
-            <div className="multiplier-dropdown">
-              <button
-                className="multiplier-current"
-                onClick={() => setMultiplierOpen(o => !o)}
-              >
-                x{multiplier} <span className="chevron">{multiplierOpen ? '▲' : '▼'}</span>
-              </button>
-              {multiplierOpen && (
-                <>
-                <div className="multiplier-backdrop" onClick={() => setMultiplierOpen(false)} />
-                <div className="multiplier-menu">
-                  {[1, 5, 10, 100].map(m => (
-                    <button
-                      key={m}
-                      className={`multiplier-option ${multiplier === m ? 'active' : ''}`}
-                      onClick={() => { setMultiplier(m); setMultiplierOpen(false) }}
-                    >
-                      x{m}
-                    </button>
-                  ))}
-                </div>
-                </>
-              )}
-            </div>
-            {(() => {
-              const bought = gameState.bought_slots || 0
-              let cost = 0
-              for (let i = 0; i < multiplier; i++) cost += calculateSlotCost(bought + i)
-              const affordable = gameState.money >= calculateSlotCost(bought)
-              return (
-                <button
-                  className="buy-slot-button"
-                  onClick={buySlot}
-                  disabled={!affordable}
-                >
-                  ➕ Slot x{multiplier} ({formatMoney(cost)})
-                </button>
-              )
-            })()}
-            <button
-              className="sell-all-button"
-              onClick={sellAllBuildings}
-              disabled={gameState.buildings.length === 0}
-            >
-              💥 Vendi Tutto
-            </button>
           </div>
+
+          {/* Lista: scorrevole, si scorre col dito se ci sono tante proprietà */}
           <div className="properties-list">
             {gameState.buildings.length === 0 ? (
               <p className="empty">Nessuna proprietà ancora</p>
@@ -1112,6 +1060,55 @@ export default function App() {
                 </div>
               ))
             )}
+          </div>
+
+          {/* Barra fissa in fondo: non si muove mai, indipendente dalla lista */}
+          <div className="properties-footer">
+            <button
+              className="sell-all-button"
+              onClick={sellAllBuildings}
+              disabled={gameState.buildings.length === 0}
+            >
+              💥 Vendi Tutto
+            </button>
+            {(() => {
+              const bought = gameState.bought_slots || 0
+              const cost = calculateSlotCost(bought)
+              const affordable = gameState.money >= cost
+              return (
+                <button
+                  className="buy-slot-button"
+                  onClick={buySlot}
+                  disabled={!affordable}
+                >
+                  ➕ Slot ({formatMoney(cost)})
+                </button>
+              )
+            })()}
+            <div className="multiplier-dropdown footer-multiplier">
+              <button
+                className="multiplier-current"
+                onClick={() => setMultiplierOpen(o => !o)}
+              >
+                x{multiplier} <span className="chevron">{multiplierOpen ? '▲' : '▼'}</span>
+              </button>
+              {multiplierOpen && (
+                <>
+                <div className="multiplier-backdrop" onClick={() => setMultiplierOpen(false)} />
+                <div className="multiplier-menu multiplier-menu-up">
+                  {[1, 5, 10, 100].map(m => (
+                    <button
+                      key={m}
+                      className={`multiplier-option ${multiplier === m ? 'active' : ''}`}
+                      onClick={() => { setMultiplier(m); setMultiplierOpen(false) }}
+                    >
+                      x{m}
+                    </button>
+                  ))}
+                </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </main>
