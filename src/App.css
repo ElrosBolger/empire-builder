@@ -992,3 +992,25 @@ body {
 .btn-back-locked:hover {
   background: #2563eb;
 }
+
+.sell-all-button {
+  padding: 6px 14px;
+  background: rgba(220, 38, 38, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(220, 38, 38, 0.5);
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.sell-all-button:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.35);
+}
+
+.sell-all-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
