@@ -90,9 +90,18 @@ export type BuildingType = {
   baseIncome: number
   costMultiplier: number
   incomeMultiplier: number
-  unlockLevel: number
   icon: string
-  tier: 1 | 2 | 3
+  description?: string
+  category: string
+}
+
+export type BuildingCategory = {
+  key: string
+  name: string
+  icon: string
+  unlockPrestige: number
+  buildings: string[]
+  description: string
 }
 
 export type PrestigeBonus = {
