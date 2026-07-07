@@ -4,10 +4,30 @@
 import { useState, useEffect, useRef } from 'react'
 import type { GameState, Building } from './types'
 import { supabase, verifyBuildingAction, signOut } from './supabaseClient'
-import { calculateLevel, calculateBuildingCost, calculateBuildingIncome, calculatePrestigeGain, calculatePrestigeBonus, getAvailableBuildingsAtLevel, calculateTotalSlots, calculateSlotCost, calculateUpgradeBatch } from './buildings'
+import { calculateLevel, calculateBuildingCost, calculateBuildingIncome, calculatePrestigeGain, calculatePrestigeBonus, calculateTotalSlots, calculateSlotCost, calculateUpgradeBatch, BUILDINGS, CATEGORIES, isCategoryUnlocked, getUnlockedCategories, getNextLockedCategory } from './buildings'
 import { formatMoney, formatIncome, formatTime } from './formatting'
 import { ACHIEVEMENTS, achievementIncomeBonus, findNewlyReached } from './achievements'
 import './App.css'
+
+// Incoraggiamenti diversi ogni volta che si prova ad aprire una categoria bloccata
+const ENCOURAGEMENTS = [
+  "Continua così, il prossimo salto di qualità è dietro l'angolo!",
+  "Ogni impero è stato costruito un mattone alla volta. Non fermarti ora.",
+  "Il tuo prossimo traguardo ti aspetta: rimetti in gioco il tuo prestigio!",
+  "Grandi imperi richiedono grande pazienza. Sei sulla strada giusta.",
+  "Un altro reset, un altro passo verso la grandezza.",
+  "Chi si ferma è perduto: rilancia il tuo impero!",
+  "Il successo ama la costanza. Riparti e cresci ancora.",
+  "Sei più vicino di quanto pensi. Continua a scalare!",
+  "I migliori imprenditori non si arrendono al primo ostacolo.",
+  "Questo traguardo si merita solo chi non molla mai.",
+  "Rialzati, ricomincia, e questa volta arriva più lontano.",
+  "La pazienza è l'investimento più redditizio di tutti."
+]
+
+function randomEncouragement(): string {
+  return ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]
+}
 
 export default function App() {
   const [gameState, setGameState] = useState<GameState | null>(null)
@@ -17,6 +37,9 @@ export default function App() {
   const [showPrestigeModal, setShowPrestigeModal] = useState(false)
   const [multiplier, setMultiplier] = useState(1)
   const [multiplierOpen, setMultiplierOpen] = useState(false)
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [lastViewedCategory, setLastViewedCategory] = useState<string>('residential')
+  const [lockedPopup, setLockedPopup] = useState<{ key: string; message: string } | null>(null)
   const [unlockedAch, setUnlockedAch] = useState<Set<string>>(new Set())
   const [showAchievements, setShowAchievements] = useState(false)
   const [achToast, setAchToast] = useState<string | null>(null)
@@ -261,6 +284,24 @@ export default function App() {
   }
 
   // Build building (con anti-cheat server)
+  // Apre una categoria: se sbloccata mostra i suoi edifici, altrimenti mostra
+  // il popup di blocco con requisito e un incoraggiamento sempre diverso.
+  function openCategory(categoryKey: string) {
+    if (!gameState) return
+    if (isCategoryUnlocked(categoryKey, gameState.prestige)) {
+      setSelectedCategory(categoryKey)
+      setLastViewedCategory(categoryKey)
+      setLockedPopup(null)
+    } else {
+      setLockedPopup({ key: categoryKey, message: randomEncouragement() })
+    }
+  }
+
+  function backToLastCategory() {
+    setSelectedCategory(lastViewedCategory)
+    setLockedPopup(null)
+  }
+
   async function buildBuilding(buildingType: string) {
     if (!gameState) return
 
@@ -782,8 +823,11 @@ export default function App() {
   const totalIncome = gameState.buildings.reduce((sum, b) =>
     sum + calculateBuildingIncome(b.type, b.level), 0
   ) * (1 + achievementIncomeBonus(unlockedAch))
-  const availableBuildings = getAvailableBuildingsAtLevel(gameState.level)
+  const unlockedCategories = getUnlockedCategories(gameState.prestige)
+  const nextLockedCategory = getNextLockedCategory(gameState.prestige)
   const prestigeGain = calculatePrestigeGain(gameState.level)
+  const currentCategory = selectedCategory ? CATEGORIES.find(c => c.key === selectedCategory) : null
+  const currentCategoryUnlocked = currentCategory ? isCategoryUnlocked(currentCategory.key, gameState.prestige) : false
 
   return (
     <div className="game-container">
@@ -819,29 +863,94 @@ export default function App() {
 
       {/* Main Game */}
       <main className="game-main">
-        {/* Buildings Grid */}
+        {/* Sezione Costruisci: a CATEGORIE sbloccate per prestige */}
         <div className="buildings-section">
-          <h2>🏗️ Costruisci</h2>
-          <div className="buildings-grid">
-            {availableBuildings.map(buildingType => (
-              <div key={buildingType} className="building-card">
-                <h3>{buildingType}</h3>
-                <p>Cost: {formatMoney(calculateBuildingCost(buildingType, 1))}</p>
-                <p>Income: {formatIncome(calculateBuildingIncome(buildingType, 1))}</p>
-                <button
-                  onClick={() => buildBuilding(buildingType)}
-                  disabled={
-                    gameState.money < calculateBuildingCost(buildingType, 1) ||
-                    gameState.buildings.length >= gameState.slots
-                  }
-                  className="btn-build"
-                >
-                  {gameState.buildings.length >= gameState.slots ? 'Slot pieni' : 'Costruisci'}
+          {!selectedCategory ? (
+            <>
+              <h2>🏗️ Costruisci</h2>
+              <div className="category-grid">
+                {unlockedCategories.map(cat => (
+                  <div
+                    key={cat.key}
+                    className="category-card unlocked"
+                    onClick={() => openCategory(cat.key)}
+                  >
+                    <div className="category-icon">{cat.icon}</div>
+                    <div className="category-name">{cat.name}</div>
+                    <div className="category-count">{cat.buildings.length} edifici</div>
+                  </div>
+                ))}
+
+                {/* Solo la PROSSIMA categoria bloccata: un'anteprima, non tutte le altre */}
+                {nextLockedCategory && (
+                  <div
+                    key={nextLockedCategory.key}
+                    className="category-card locked"
+                    onClick={() => openCategory(nextLockedCategory.key)}
+                  >
+                    <div className="category-icon">🔒</div>
+                    <div className="category-name">{nextLockedCategory.name}</div>
+                    <div className="category-count">Richiede ⭐ {nextLockedCategory.unlockPrestige} Prestige</div>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="category-detail-head">
+                <button className="btn-back-categories" onClick={() => setSelectedCategory(null)}>
+                  ⬅ Categorie
+                </button>
+                <h2>{currentCategory?.icon} {currentCategory?.name}</h2>
+              </div>
+              <div className="buildings-grid">
+                {currentCategoryUnlocked && currentCategory?.buildings.map(buildingType => {
+                  const cfg = BUILDINGS[buildingType]
+                  return (
+                    <div key={buildingType} className="building-card">
+                      <h3>{cfg?.icon} {cfg?.name || buildingType}</h3>
+                      {cfg?.description && <p className="building-desc">{cfg.description}</p>}
+                      <p>Cost: {formatMoney(calculateBuildingCost(buildingType, 1))}</p>
+                      <p>Income: {formatIncome(calculateBuildingIncome(buildingType, 1))}</p>
+                      <button
+                        onClick={() => buildBuilding(buildingType)}
+                        disabled={
+                          gameState.money < calculateBuildingCost(buildingType, 1) ||
+                          gameState.buildings.length >= gameState.slots
+                        }
+                        className="btn-build"
+                      >
+                        {gameState.buildings.length >= gameState.slots ? 'Slot pieni' : 'Costruisci'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Popup categoria bloccata: requisito, incoraggiamento sempre diverso, ritorno */}
+        {lockedPopup && (() => {
+          const cat = CATEGORIES.find(c => c.key === lockedPopup.key)
+          if (!cat) return null
+          const missing = Math.max(0, cat.unlockPrestige - gameState.prestige)
+          return (
+            <div className="modal-overlay" onClick={() => setLockedPopup(null)}>
+              <div className="modal-content locked-category-modal" onClick={e => e.stopPropagation()}>
+                <div className="locked-modal-icon">🔒 {cat.icon}</div>
+                <h2>{cat.name}</h2>
+                <p className="locked-modal-requirement">
+                  Serve ⭐ <b>{cat.unlockPrestige}</b> Prestige (te ne mancano <b>{missing}</b>)
+                </p>
+                <p className="locked-modal-message">{lockedPopup.message}</p>
+                <button className="btn-back-locked" onClick={backToLastCategory}>
+                  🔙 Torna indietro
                 </button>
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          )
+        })()}
 
         {/* Properties List */}
         <div className="properties-section">
