@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 // supabaseClient.ts
 // Connessione Supabase con anti-cheat
 
