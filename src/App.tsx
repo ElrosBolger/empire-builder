@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { GameState, Building } from './types'
 import { supabase, verifyBuildingAction, signOut } from './supabaseClient'
 import { calculateLevel, calculateBuildingCost, calculateBuildingIncome, calculatePrestigeGain, calculatePrestigeBonus, calculateTotalSlots, calculateSlotCost, calculateUpgradeBatch, BUILDINGS, CATEGORIES, isCategoryUnlocked, getUnlockedCategories, getNextLockedCategory, groupCategoriesByPyramidRow } from './buildings'
-import { formatMoney, formatIncome, formatTime } from './formatting'
+import { formatMoney, formatIncome, formatTime, formatPercent } from './formatting'
 import { ACHIEVEMENTS, achievementIncomeBonus, findNewlyReached } from './achievements'
 import './App.css'
 
@@ -312,6 +312,7 @@ export default function App() {
     const userId = gameState.user_id
     let moneyBefore = 0
     let levelNow = gameState.level
+    let lifetimeBuiltBefore = 0
     let blockedReason: 'slots' | 'money' | null = null
 
     // 1. Aggiornamento istantaneo (sincrono, sempre contro lo stato più recente:
@@ -323,12 +324,13 @@ export default function App() {
 
       moneyBefore = prev.money
       levelNow = prev.level
+      lifetimeBuiltBefore = (prev as any).lifetime_buildings_built || 0
       const newBuilding: Building = { id: tempId, type: buildingType, level: 1, multiplier: 0 }
       return {
         ...prev,
         money: prev.money - cost,
         buildings: [...prev.buildings, newBuilding],
-        lifetime_buildings_built: ((prev as any).lifetime_buildings_built || 0) + 1
+        lifetime_buildings_built: lifetimeBuiltBefore + 1
       } as any
     })
 
@@ -376,7 +378,7 @@ export default function App() {
         const newMoney = moneyBefore - cost
         await supabase.from('game_state').update({
           money: newMoney,
-          lifetime_buildings_built: ((gameState as any).lifetime_buildings_built || 0) + 1
+          lifetime_buildings_built: lifetimeBuiltBefore + 1
         }).eq('user_id', userId)
 
         await supabase.from('transactions').insert({
@@ -404,54 +406,67 @@ export default function App() {
   }
 
   // Vendi un edificio (rimborso 50% del costo, mai un guadagno)
-  async function sellBuilding(building: Building) {
+  // Vendita OTTIMISTICA: la UI si aggiorna subito, la persistenza avviene in
+  // sottofondo (stesso schema di buildBuilding: niente più attese sui click).
+  function sellBuilding(building: Building) {
     if (!gameState) return
 
-    try {
-      const refund = Math.floor(calculateBuildingCost(building.type, building.level) * 0.5)
-      const newMoney = gameState.money + refund
+    const refund = Math.floor(calculateBuildingCost(building.type, building.level) * 0.5)
+    const userId = gameState.user_id
+    let moneyBefore = 0
+    let levelNow = gameState.level
 
-      // 1. Rimuovi l'edificio dal DB
-      const { error: delError } = await supabase
-        .from('buildings')
-        .delete()
-        .eq('id', building.id)
-
-      if (delError) {
-        alert('Vendita fallita: ' + delError.message)
-        return
+    // 1. Aggiornamento istantaneo
+    setGameState(prev => {
+      if (!prev) return prev
+      moneyBefore = prev.money
+      levelNow = prev.level
+      return {
+        ...prev,
+        money: prev.money + refund,
+        buildings: prev.buildings.filter(b => b.id !== building.id)
       }
+    })
 
-      // 2. Aggiorna il denaro (total_money_earned NON cambia: non è un vero guadagno)
-      await supabase
-        .from('game_state')
-        .update({ money: newMoney })
-        .eq('user_id', gameState.user_id)
+    // 2. Persistenza in BACKGROUND
+    ;(async () => {
+      try {
+        const { error: delError } = await supabase
+          .from('buildings')
+          .delete()
+          .eq('id', building.id)
 
-      // 3. Log transazione (audit trail)
-      await supabase.from('transactions').insert({
-        user_id: gameState.user_id,
-        action: 'sell',
-        building_type: building.type,
-        cost_paid: -refund,
-        money_before: gameState.money,
-        money_after: newMoney,
-        level_before: gameState.level,
-        level_after: gameState.level,
-        timestamp: new Date(),
-        client_timestamp: new Date()
-      })
+        if (delError) throw delError
 
-      // 4. Aggiorna UI
-      setGameState({
-        ...gameState,
-        money: newMoney,
-        buildings: gameState.buildings.filter(b => b.id !== building.id)
-      })
-    } catch (err) {
-      console.error('Sell error:', err)
-      alert('Vendita fallita: ' + (err instanceof Error ? err.message : 'Unknown error'))
-    }
+        const newMoney = moneyBefore + refund
+        await supabase
+          .from('game_state')
+          .update({ money: newMoney })
+          .eq('user_id', userId)
+
+        await supabase.from('transactions').insert({
+          user_id: userId,
+          action: 'sell',
+          building_type: building.type,
+          cost_paid: -refund,
+          money_before: moneyBefore,
+          money_after: newMoney,
+          level_before: levelNow,
+          level_after: levelNow,
+          timestamp: new Date(),
+          client_timestamp: new Date()
+        })
+      } catch (err) {
+        console.error('Sell error:', err)
+        // Rollback: rimetti l'edificio e togli il rimborso
+        setGameState(prev => prev ? {
+          ...prev,
+          money: prev.money - refund,
+          buildings: [...prev.buildings, building]
+        } : prev)
+        alert('Vendita fallita, riprova: ' + (err instanceof Error ? err.message : 'errore sconosciuto'))
+      }
+    })()
   }
 
   // Vendi TUTTI gli edifici in una sola volta: chiede conferma esplicita (azione
@@ -474,13 +489,17 @@ export default function App() {
 
     const userId = gameState.user_id
     const soldBuildingIds = gameState.buildings.map(b => b.id)
+    const soldBuildings = gameState.buildings
+    let moneyBefore = 0
+    let levelNow = gameState.level
 
     // 1. Aggiornamento istantaneo della UI
-    setGameState(prev => prev ? {
-      ...prev,
-      money: prev.money + totalRefund,
-      buildings: []
-    } : prev)
+    setGameState(prev => {
+      if (!prev) return prev
+      moneyBefore = prev.money
+      levelNow = prev.level
+      return { ...prev, money: prev.money + totalRefund, buildings: [] }
+    })
 
     // 2. Cancellazione e log in BACKGROUND (un'unica query, non una per edificio)
     ;(async () => {
@@ -492,174 +511,199 @@ export default function App() {
 
         if (delError) throw delError
 
+        const newMoney = moneyBefore + totalRefund
         await supabase
           .from('game_state')
-          .update({ money: (gameState.money + totalRefund) })
+          .update({ money: newMoney })
           .eq('user_id', userId)
 
         await supabase.from('transactions').insert({
           user_id: userId,
           action: 'sell_all',
           cost_paid: -totalRefund,
-          money_before: gameState.money,
-          money_after: gameState.money + totalRefund,
-          level_before: gameState.level,
-          level_after: gameState.level,
+          money_before: moneyBefore,
+          money_after: newMoney,
+          level_before: levelNow,
+          level_after: levelNow,
           timestamp: new Date(),
           client_timestamp: new Date()
         })
       } catch (err) {
         console.error('Sell all error:', err)
-        alert('Vendita di massa non completata correttamente. Ricarica la pagina per verificare lo stato.')
+        // Rollback: rimetti tutti gli edifici e togli il rimborso
+        setGameState(prev => prev ? {
+          ...prev,
+          money: prev.money - totalRefund,
+          buildings: [...prev.buildings, ...soldBuildings]
+        } : prev)
+        alert('Vendita di massa fallita, riprova.')
       }
     })()
   }
 
-  // Potenzia un edificio: +1 livello, aumenta il reddito. Costo esponenziale (anti-exploit)
-  async function upgradeBuilding(building: Building) {
+  // Potenzia un edificio: +livelli, aumenta il reddito. Costo esponenziale (anti-exploit).
+  // OTTIMISTICA come buildBuilding/sellBuilding: dopo la conferma, la UI si aggiorna
+  // subito e la persistenza avviene in sottofondo.
+  function upgradeBuilding(building: Building) {
     if (!gameState) return
 
-    try {
-      // Calcola quanti livelli si possono comprare col moltiplicatore e i soldi disponibili
-      const batch = calculateUpgradeBatch(
-        building.type,
-        building.level,
-        multiplier,
-        gameState.money
-      )
-
-      if (batch.levels === 0) {
-        alert('Fondi insufficienti per il potenziamento')
-        return
-      }
-
-      const targetLevel = building.level + batch.levels
-      const cost = batch.totalCost
-
-      // Conferma esplicita dell'acquisto
-      const incomeNow = calculateBuildingIncome(building.type, building.level)
-      const incomeNext = calculateBuildingIncome(building.type, targetLevel)
-      const conferma = window.confirm(
-        `Potenziare ${building.type} di ${batch.levels} liv. (Lv${building.level} → Lv${targetLevel})?\n\n` +
-        `Costo totale: ${formatMoney(cost)}\n` +
-        `Reddito: ${formatIncome(incomeNow)} → ${formatIncome(incomeNext)}`
-      )
-      if (!conferma) return
-
-      // Sincronizza il denaro reale col server PRIMA della verifica anti-cheat
-      await syncMoneyToServer()
-
-      // Anti-cheat: verifica lato server (sul costo totale)
-      const { data: verification, error: verifyError } = await verifyBuildingAction(
-        gameState.user_id,
-        'upgrade',
-        building.type,
-        cost,
-        new Date()
-      )
-
-      if (verifyError || !verification?.allowed) {
-        alert(`Upgrade negato: ${verification?.error_message || verifyError?.message}`)
-        return
-      }
-
-      const newMoney = gameState.money - cost
-
-      // 1. Aggiorna il livello dell'edificio nel DB
-      const { error: updError } = await supabase
-        .from('buildings')
-        .update({ level: targetLevel })
-        .eq('id', building.id)
-
-      if (updError) {
-        alert('Upgrade fallito: ' + updError.message)
-        return
-      }
-
-      // 2. Scala il denaro (total_money_earned NON cambia: è una spesa)
-      await supabase
-        .from('game_state')
-        .update({ money: newMoney, lifetime_upgrades: (((gameState as any).lifetime_upgrades || 0) + batch.levels) })
-        .eq('user_id', gameState.user_id)
-
-      // 3. Log transazione
-      await supabase.from('transactions').insert({
-        user_id: gameState.user_id,
-        action: 'upgrade',
-        building_type: building.type,
-        cost_paid: cost,
-        money_before: gameState.money,
-        money_after: newMoney,
-        level_before: gameState.level,
-        level_after: gameState.level,
-        timestamp: new Date(),
-        client_timestamp: new Date()
-      })
-
-      // 4. Aggiorna UI
-      setGameState({
-        ...gameState,
-        money: newMoney,
-        buildings: gameState.buildings.map(b =>
-          b.id === building.id ? { ...b, level: targetLevel } : b
-        ),
-        lifetime_upgrades: (((gameState as any).lifetime_upgrades || 0) + batch.levels)
-      } as any)
-    } catch (err) {
-      console.error('Upgrade error:', err)
-      alert('Upgrade fallito: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    const batch = calculateUpgradeBatch(building.type, building.level, multiplier, gameState.money)
+    if (batch.levels === 0) {
+      alert('Fondi insufficienti per il potenziamento')
+      return
     }
+
+    const targetLevel = building.level + batch.levels
+    const cost = batch.totalCost
+
+    const incomeNow = calculateBuildingIncome(building.type, building.level)
+    const incomeNext = calculateBuildingIncome(building.type, targetLevel)
+    const conferma = window.confirm(
+      `Potenziare ${building.type} di ${batch.levels} liv. (Lv${building.level} → Lv${targetLevel})?\n\n` +
+      `Costo totale: ${formatMoney(cost)}\n` +
+      `Reddito: ${formatIncome(incomeNow)} → ${formatIncome(incomeNext)}`
+    )
+    if (!conferma) return
+
+    const userId = gameState.user_id
+    let moneyBefore = 0
+    let levelNow = gameState.level
+    let lifetimeUpgradesBefore = 0
+
+    // 1. Aggiornamento istantaneo
+    setGameState(prev => {
+      if (!prev) return prev
+      moneyBefore = prev.money
+      levelNow = prev.level
+      lifetimeUpgradesBefore = (prev as any).lifetime_upgrades || 0
+      return {
+        ...prev,
+        money: prev.money - cost,
+        buildings: prev.buildings.map(b => b.id === building.id ? { ...b, level: targetLevel } : b),
+        lifetime_upgrades: lifetimeUpgradesBefore + batch.levels
+      } as any
+    })
+
+    // 2. Persistenza in BACKGROUND: verifica anti-cheat + salvataggio. Se il
+    //    server rifiuta, annulla la modifica locale.
+    ;(async () => {
+      try {
+        await syncMoneyToServer()
+
+        const { data: verification, error: verifyError } = await verifyBuildingAction(
+          userId, 'upgrade', building.type, cost, new Date()
+        )
+
+        if (verifyError || !verification?.allowed) {
+          setGameState(prev => prev ? {
+            ...prev,
+            money: prev.money + cost,
+            buildings: prev.buildings.map(b => b.id === building.id ? { ...b, level: building.level } : b),
+            lifetime_upgrades: lifetimeUpgradesBefore
+          } as any : prev)
+          alert(`Upgrade negato: ${verification?.error_message || verifyError?.message}`)
+          return
+        }
+
+        const { error: updError } = await supabase
+          .from('buildings')
+          .update({ level: targetLevel })
+          .eq('id', building.id)
+
+        if (updError) throw updError
+
+        const newMoney = moneyBefore - cost
+        await supabase
+          .from('game_state')
+          .update({ money: newMoney, lifetime_upgrades: lifetimeUpgradesBefore + batch.levels })
+          .eq('user_id', userId)
+
+        await supabase.from('transactions').insert({
+          user_id: userId,
+          action: 'upgrade',
+          building_type: building.type,
+          cost_paid: cost,
+          money_before: moneyBefore,
+          money_after: newMoney,
+          level_before: levelNow,
+          level_after: levelNow,
+          timestamp: new Date(),
+          client_timestamp: new Date()
+        })
+      } catch (err) {
+        console.error('Upgrade error:', err)
+        setGameState(prev => prev ? {
+          ...prev,
+          money: prev.money + cost,
+          buildings: prev.buildings.map(b => b.id === building.id ? { ...b, level: building.level } : b),
+          lifetime_upgrades: lifetimeUpgradesBefore
+        } as any : prev)
+        alert('Upgrade fallito, riprova: ' + (err instanceof Error ? err.message : 'errore sconosciuto'))
+      }
+    })()
   }
 
-  // Compra uno slot extra con denaro (costo esponenziale)
-  // Compra sempre UN SOLO slot per click: azione indipendente dal moltiplicatore
-  // globale (che serve solo per gli upgrade), così non si svuota il conto per sbaglio.
-  async function buySlot() {
+  // Compra sempre UN SOLO slot per click (indipendente dal moltiplicatore, che
+  // serve solo per gli upgrade). OTTIMISTICA: la UI si aggiorna subito.
+  function buySlot() {
     if (!gameState) return
 
-    try {
-      const bought = gameState.bought_slots || 0
-      const cost = calculateSlotCost(bought)
-
-      if (gameState.money < cost) {
-        alert('Fondi insufficienti per comprare uno slot')
-        return
-      }
-
-      const newMoney = gameState.money - cost
-      const newBought = bought + 1
-      const newSlots = calculateTotalSlots(gameState.prestige, newBought)
-
-      // Salva nel DB
-      await supabase
-        .from('game_state')
-        .update({ money: newMoney, bought_slots: newBought, slots: newSlots })
-        .eq('user_id', gameState.user_id)
-
-      // Log transazione
-      await supabase.from('transactions').insert({
-        user_id: gameState.user_id,
-        action: 'buy_slot',
-        cost_paid: cost,
-        money_before: gameState.money,
-        money_after: newMoney,
-        level_before: gameState.level,
-        level_after: gameState.level,
-        timestamp: new Date(),
-        client_timestamp: new Date()
-      })
-
-      // Aggiorna UI
-      setGameState({
-        ...gameState,
-        money: newMoney,
-        bought_slots: newBought,
-        slots: newSlots
-      })
-    } catch (err) {
-      console.error('Buy slot error:', err)
-      alert('Acquisto slot fallito: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    const bought = gameState.bought_slots || 0
+    const cost = calculateSlotCost(bought)
+    if (gameState.money < cost) {
+      alert('Fondi insufficienti per comprare uno slot')
+      return
     }
+
+    const userId = gameState.user_id
+    const prestige = gameState.prestige
+    let moneyBefore = 0
+    let levelNow = gameState.level
+
+    const newBought = bought + 1
+    const newSlots = calculateTotalSlots(prestige, newBought)
+
+    // 1. Aggiornamento istantaneo
+    setGameState(prev => {
+      if (!prev) return prev
+      moneyBefore = prev.money
+      levelNow = prev.level
+      return { ...prev, money: prev.money - cost, bought_slots: newBought, slots: newSlots }
+    })
+
+    // 2. Persistenza in BACKGROUND
+    ;(async () => {
+      try {
+        const newMoney = moneyBefore - cost
+        const { error } = await supabase
+          .from('game_state')
+          .update({ money: newMoney, bought_slots: newBought, slots: newSlots })
+          .eq('user_id', userId)
+
+        if (error) throw error
+
+        await supabase.from('transactions').insert({
+          user_id: userId,
+          action: 'buy_slot',
+          cost_paid: cost,
+          money_before: moneyBefore,
+          money_after: newMoney,
+          level_before: levelNow,
+          level_after: levelNow,
+          timestamp: new Date(),
+          client_timestamp: new Date()
+        })
+      } catch (err) {
+        console.error('Buy slot error:', err)
+        setGameState(prev => prev ? {
+          ...prev,
+          money: prev.money + cost,
+          bought_slots: bought,
+          slots: calculateTotalSlots(prestige, bought)
+        } : prev)
+        alert('Acquisto slot fallito, riprova: ' + (err instanceof Error ? err.message : 'errore sconosciuto'))
+      }
+    })()
   }
 
   // Prestige choice
@@ -1305,6 +1349,3 @@ function PrestigeModal({ gameState, onChoice }: { gameState: GameState; onChoice
   )
 }
 
-function formatPercent(value: number): string {
-  return value.toFixed(2) + '%'
-}
