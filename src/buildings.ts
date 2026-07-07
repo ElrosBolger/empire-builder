@@ -377,7 +377,7 @@ export const BUILDINGS: Record<string, BuildingType> = {
     category: 'financial'
   },
   investment_fund: {
-    name: 'Fondo d'Investimento',
+    name: "Fondo d'Investimento",
     baseCost: 322000000,
     baseIncome: 11499999,
     costMultiplier: 1.258,
@@ -485,7 +485,7 @@ export const BUILDINGS: Record<string, BuildingType> = {
     category: 'tourism'
   },
   hospitality_empire: {
-    name: 'Impero dell'Ospitalità',
+    name: "Impero dell'Ospitalità",
     baseCost: 25900000000,
     baseIncome: 780000000,
     costMultiplier: 1.289,
